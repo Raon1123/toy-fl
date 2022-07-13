@@ -36,7 +36,8 @@ def cifar10_dict(PATH):
             train_data = data
             train_labels = labels
         else:
-            train_data = train_data.con
+            train_data = np.concatenate((train_data, data))
+            train_labels = np.concatenate((train_labels, labels))
     
     # parse test batch
     file_name = 'test_batch'
@@ -54,6 +55,12 @@ def argparser():
     # directory
     parser.add_argument('--data_dir', type=str, default='./data',
         help='root directory of data')
+
+    # local hyperparameter
+    parser.add_argument('--lr', type=float, default=1e-3,
+        help='local learning rate')
+    parser.add_argument('--momentum', type=float, default=0.9,
+        help='local momentum for SGD')
 
     args = parser.parse_args()
     return args
