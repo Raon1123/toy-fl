@@ -56,7 +56,11 @@ def argparser():
     parser.add_argument('--data_dir', type=str, default='./data',
         help='root directory of data')
 
+    parser.add_argument('--fed_lr', type=float, default=1e-2)
+    parser.add_argument('--batch_size', type=int, default=32)
+
     # local hyperparameter
+    parser.add_argument('--optimizer', type=str, default='SGD')
     parser.add_argument('--lr', type=float, default=1e-3,
         help='local learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
