@@ -2,6 +2,7 @@ import os
 import pickle
 import argparse
 
+import torch
 import numpy as np
 
 def unpickle(file):
@@ -64,10 +65,22 @@ def argparser():
 
     # local hyperparameter
     parser.add_argument('--optimizer', type=str, default='SGD')
-    parser.add_argument('--lr', type=float, default=1e-3,
+    parser.add_argument('--lr', type=float, default=5e-4,
         help='local learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
         help='local momentum for SGD')
+    parser.add_argument('--local_epoch', type=int, default=1)
 
     args = parser.parse_args()
     return args
+
+
+def apply_transform(imgs, transform):
+    size = imgs.shape[0]
+    results = torch.zeros((size, 3, 32, 32))
+
+    for idx in range(size):
+        img = transform(imgs[idx])
+        results[idx, :] = img
+
+    return results

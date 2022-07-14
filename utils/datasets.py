@@ -15,7 +15,4 @@ class CustomDatasets(Dataset):
         x = self.X[index]
         y = self.y[index]
 
-        if self.transforms:
-            x = self.transforms(x)
-
         return x, y
