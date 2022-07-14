@@ -55,9 +55,12 @@ def argparser():
     # directory
     parser.add_argument('--data_dir', type=str, default='./data',
         help='root directory of data')
+    parser.add_argument('--dirichlet_alpha', type=float, default=0.2)
 
-    parser.add_argument('--fed_lr', type=float, default=1e-2)
+    parser.add_argument('-C', '--num_clients', type=int, default=100)
     parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('-A', '--active_selection', type=int, default=10)
+    parser.add_argument('-R', '--num_rounds', type=int, default=2000)
 
     # local hyperparameter
     parser.add_argument('--optimizer', type=str, default='SGD')

@@ -19,9 +19,7 @@ def run_round(model,
     partition, 
     datasets, 
     labels,
-    args,
-    acs=10, 
-    batch_sz=32):
+    args):
 
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -55,7 +53,7 @@ def run_round(model,
         loss_list.append(loss)
     """
     # nice sampling
-    selected_clients = np.random.choice(len(partition), acs)
+    selected_clients = np.random.choice(len(partition), args.active_selection)
 
     total_size = 0
     for client in selected_clients:
@@ -69,7 +67,7 @@ def run_round(model,
         client_size = len(part)
 
         train_dataset = CustomDatasets(client_data, client_label, transforms=transform)
-        data_loader = DataLoader(train_dataset, batch_size=batch_sz, shuffle=True, num_workers=0)
+        data_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
 
         copy_model = copy.deepcopy(model)
         copy_model.to(device)
@@ -96,10 +94,10 @@ def main():
     args = argparser()
 
     device = 'cuda:0'
-    alpha = 0.2
+    alpha = args.dirichlet_alpha
     num_labels = 10
-    num_clients = 100
-    num_rounds = 2000
+    num_clients = args.num_clients
+    num_rounds = args.num_rounds
     torch.manual_seed(32)
 
     writer = SummaryWriter()
