@@ -53,8 +53,10 @@ def run_round(model,
 
         loss_list.append(loss)
         total_loss += loss
+
+    pdf = list(map(lambda item: item/total_loss, loss_list))
     # nice sampling
-    selected_clients = np.random.choice(len(partition), args.active_selection)
+    selected_clients = np.random.choice(len(partition), args.active_selection, p=pdf)
 
     total_size = 0
     for client in selected_clients:
