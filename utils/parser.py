@@ -3,6 +3,7 @@ import pickle
 import argparse
 
 import torch
+import torchvision.transforms as transforms
 import numpy as np
 
 def unpickle(file):
@@ -21,6 +22,11 @@ def cifar10_dict(PATH):
     - test_data
     - test_labels
     """
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    ])
+
     # parse train batch
     batches = 5
     train_data, train_labels = None, None
@@ -47,11 +53,21 @@ def cifar10_dict(PATH):
     test_data = batch_dict[b'data']
     test_labels = batch_dict[b'labels']
 
+    train_data = np.reshape(train_data, (-1,32,32,3))
+    train_data = apply_transform(train_data, transform)
+    test_data = np.reshape(test_data, (-1,32,32,3))
+    test_data = apply_transform(test_data, transform)
+
+    train_labels = torch.Tensor(train_labels).type(torch.long)
+    test_labels = torch.Tensor(test_labels).type(torch.long)
+
     return train_data, train_labels, test_data, test_labels
 
 
 def argparser():
     parser = argparse.ArgumentParser()
+
+    parser.add_argument('--device', type=str, default='cuda:0')
 
     # directory
     parser.add_argument('--data_dir', type=str, default='./data',
@@ -59,17 +75,26 @@ def argparser():
     parser.add_argument('--dirichlet_alpha', type=float, default=0.2)
 
     parser.add_argument('-C', '--num_clients', type=int, default=100)
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('-A', '--active_selection', type=int, default=10)
     parser.add_argument('-R', '--num_rounds', type=int, default=2000)
+    parser.add_argument('--batch_size', type=int, default=32)
+
+    parser.add_argument('-A', '--active_selection', type=int, default=10)
+    parser.add_argument('--active_algorithm', type=str, default='Random',
+        choices=['Random', 'LossSampling'],
+        help='Active client selection strategy')
 
     # local hyperparameter
     parser.add_argument('--optimizer', type=str, default='SGD')
-    parser.add_argument('--lr', type=float, default=5e-4,
+    parser.add_argument('--lr', type=float, default=1e-4,
         help='local learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
         help='local momentum for SGD')
     parser.add_argument('--local_epoch', type=int, default=1)
+
+    parser.add_argument('--logdir', type=str, default='./logdir')
+    parser.add_argument('--log_freq', type=int, default=20)
+    
+    parser.add_argument('--save_path', type=str, default='./save')
 
     args = parser.parse_args()
     return args
