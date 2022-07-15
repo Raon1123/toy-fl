@@ -1,3 +1,7 @@
 data/
 __pycache__/
 runs/
+
+nohup.out
+
+logdir/
