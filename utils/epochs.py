@@ -39,7 +39,7 @@ def test_epoch(model, dataloader, device='cuda:0', use_pbar=False):
 
     acc = 100 * correct / total
 
-    return acc
+    return acc, loss
 
 
 def train_epoch(model, dataloader, args, device='cuda:0', use_pbar=False):
@@ -97,9 +97,7 @@ def run_round(model,
             train_dataset = TensorDataset(client_data, client_label)
             data_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
 
-            copy_model = copy.deepcopy(model)
-            copy_model.to(device)
-            loss = train_epoch(copy_model, data_loader, args, device)
+            acc, loss = test_epoch(model, data_loader, args, device)
 
             loss_list.append(loss)
             total_loss += loss

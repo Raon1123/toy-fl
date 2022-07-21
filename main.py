@@ -93,7 +93,7 @@ def main():
         run_round(model, partition, train_data, train_labels, args)
 
         # test phase
-        acc = test_epoch(model, test_loader, device)
+        acc, loss = test_epoch(model, test_loader, device)
 
         if (writer is not None) and (round % args.log_freq == 0):
             writer.add_scalar('Acc', acc, round)
@@ -105,7 +105,7 @@ def main():
     center_model =  CNN().to(device)
     for epoch in tqdm(range(200)):
         train_epoch(center_model, train_loader, args)
-    acc = test_epoch(center_model, test_loader, device)
+    acc, loss = test_epoch(center_model, test_loader, device)
     print(acc)
 
 if __name__=='__main__':
