@@ -3,5 +3,8 @@ __pycache__/
 runs/
 
 nohup.out
+run.sh
+*lprof
 
 logdir/
+save/

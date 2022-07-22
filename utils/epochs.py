@@ -19,6 +19,7 @@ def get_optimizer(model, args):
     return optimizer
 
 
+@profile
 def test_epoch(model, dataloader, device='cuda:0', use_pbar=False):
     if use_pbar:
         pbar = tqdm(dataloader, desc='Test epoch')
@@ -26,10 +27,11 @@ def test_epoch(model, dataloader, device='cuda:0', use_pbar=False):
         pbar = dataloader
 
     total, correct = 0, 0
-    loss = 0.0
+    total_loss = 0.0
+    lossf = nn.CrossEntropyLoss()
 
     with torch.no_grad():
-        for (imgs, labels) in pbar:
+        for imgs, labels in pbar:
             imgs, labels = imgs.to(device), labels.to(device) 
 
             outputs = model(imgs)
@@ -37,11 +39,15 @@ def test_epoch(model, dataloader, device='cuda:0', use_pbar=False):
             total += labels.size(0)
             correct += (pred == labels).sum().item()
 
+            loss = lossf(outputs, labels)
+            total_loss += loss.detach().cpu().item()
+
     acc = 100 * correct / total
+    avg_loss = total_loss / total
 
-    return acc, loss
+    return acc, total_loss, avg_loss
 
-
+@profile
 def train_epoch(model, dataloader, args, device='cuda:0', use_pbar=False):
     if use_pbar:
         pbar = tqdm(dataloader, desc='Train epoch')
@@ -64,16 +70,24 @@ def train_epoch(model, dataloader, args, device='cuda:0', use_pbar=False):
         loss.backward()
         optimizer.step()
 
-        total_loss += loss.item()
+        total_loss += loss.detach().cpu().item()
 
     return total_loss
 
 
+@profile
 def run_round(model, 
-    partition, 
     datasets, 
-    labels,
     args):
+    """
+    Run one FL round
+
+    Input
+    - model: FL model
+    - datasets: client TensorDatasets
+
+    Output    
+    """
 
     device = args.device
     lossf = nn.CrossEntropyLoss()
@@ -84,42 +98,38 @@ def run_round(model,
             params[key] = copy.deepcopy(value)
             params[key].zero_()
 
+    loader_list = []
     loss_list = []
     total_loss = 0.0
+
+    for dataset in datasets:
+        loader = data_loader = DataLoader(dataset, batch_size=args.batch_size, 
+            shuffle=True, num_workers=args.num_workers, pin_memory=args.pin_memory)
+        loader_list.append(loader)
     
     if args.active_algorithm != 'Random':
-        pbar = tqdm(partition, desc='Local learning')
-        for client in pbar:
-            part = np.array(client)
-            client_data = datasets[part, :]
-            client_label = labels[part]
-
-            train_dataset = TensorDataset(client_data, client_label)
-            data_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
-
-            acc, loss = test_epoch(model, data_loader, args, device)
+        pbar = tqdm(loader_list, desc='Local learning')
+        for data_loader in pbar:
+            _, _, loss = test_epoch(model, data_loader, device)
 
             loss_list.append(loss)
             total_loss += loss
-
         pdf = list(map(lambda item: item/total_loss, loss_list))
     else:
         pdf = [1.0 / args.num_clients] * args.num_clients
-    selected_clients = np.random.choice(len(partition), args.active_selection, p=pdf)
+    selected_clients = np.random.choice(args.num_clients, args.active_selection, replace=False, p=pdf)
+
+    print("Selected clients: ", selected_clients)
 
     total_size = 0
-    for client in selected_clients:
-        part = len(partition[client])
-        total_size += part
+    for client_idx in selected_clients:
+        client_size = len(datasets[client_idx])
+        total_size += client_size
 
-    for client in selected_clients:
-        part = np.array(partition[client])
-        client_data = datasets[part, :]
-        client_label = labels[part]
-        client_size = len(part)
-
-        train_dataset = TensorDataset(client_data, client_label)
-        data_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
+    for client_idx in selected_clients:
+        train_dataset = datasets[client_idx]
+        client_size = len(train_dataset)
+        data_loader = loader_list[client_idx]
 
         copy_model = copy.deepcopy(model)
         copy_model.to(device)

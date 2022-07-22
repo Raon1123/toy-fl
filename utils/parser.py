@@ -67,11 +67,14 @@ def cifar10_dict(PATH):
 def argparser():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--device', type=str, default='cuda:0')
+    parser.add_argument('--profile', type=bool, default=False)
+    parser.add_argument('--device', type=str, default='cuda:1')
 
     # directory
     parser.add_argument('--data_dir', type=str, default='./data',
         help='root directory of data')
+    parser.add_argument('--num_workers', type=int, default=4)
+    parser.add_argument('--pin_memory', type=bool, default=True)
     parser.add_argument('--dirichlet_alpha', type=float, default=0.2)
 
     parser.add_argument('-C', '--num_clients', type=int, default=100)
@@ -94,6 +97,7 @@ def argparser():
     parser.add_argument('--logdir', type=str, default='./logdir')
     parser.add_argument('--log_freq', type=int, default=20)
     
+    parser.add_argument('--model_save', type=bool, default=False)
     parser.add_argument('--save_path', type=str, default='./save')
 
     args = parser.parse_args()

@@ -1,4 +1,5 @@
-from ntpath import join
+import cProfile, pstats
+
 import os
 from datetime import datetime
 
@@ -10,8 +11,8 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 from models.cnn import CNN
-from utils.parser import cifar10_dict, argparser, apply_transform
-from utils.epochs import test_epoch, train_epoch, run_round
+from utils.parser import cifar10_dict, argparser
+from utils.epochs import test_epoch, run_round
 
 def exp_str(args):
     join_list = []
@@ -33,9 +34,8 @@ def exp_str(args):
     return ret
 
 
-def main():
-    args = argparser()
-
+@profile
+def main(args):
     device = args.device
     experiment = exp_str(args)
     
@@ -62,6 +62,7 @@ def main():
 
     # make partition
     partition = []
+    client_datasets = []
     client_size = np.random.dirichlet([alpha] * num_clients, size=1) # life is RANDOM
     client_dist = np.random.dirichlet([alpha] * 10, size=num_clients) # distribution of client
     
@@ -71,18 +72,23 @@ def main():
         label_idx += [idx]
 
     # sampling
-    for client in range(num_clients):
+    for client_id in range(num_clients):
         sample_idx = []
-        size = int(train_sz * client_size[0, client]) + 1
-        if size > 0:
-            sample_dist = client_dist[client]
+        size = int(train_sz * client_size[0, client_id]) + 1
+        sample_dist = client_dist[client_id]
 
-            for label in range(num_labels):
-                sample = int(sample_dist[label] * size)
-                sample = np.random.choice(label_idx[label], size).tolist()
-                sample_idx += sample
+        for label in range(num_labels):
+            sample = int(sample_dist[label] * size)
+            sample = np.random.choice(label_idx[label], size).tolist()
+            sample_idx += sample
 
-            partition.append(sample_idx)
+        sample_idx = np.array(sample_idx)
+        partition.append(sample_idx)
+
+        client_data = train_data[sample_idx, :]
+        client_label = train_labels[sample_idx]
+        client_loader = TensorDataset(client_data, client_label)
+        client_datasets.append(client_loader)
 
     # hyperparam
     model = CNN().to(device)
@@ -90,23 +96,40 @@ def main():
     # train phase
     pbar = tqdm(range(num_rounds), desc='FL round')
     for round in pbar:
-        run_round(model, partition, train_data, train_labels, args)
+        run_round(model, client_datasets, args)
 
         # test phase
-        acc, loss = test_epoch(model, test_loader, device)
+        acc, _, avg_loss = test_epoch(model, test_loader, device)
 
         if (writer is not None) and (round % args.log_freq == 0):
-            writer.add_scalar('Acc', acc, round)
+            writer.add_scalar('Test Acc', acc, round)
+            writer.add_scalar('Test Loss', avg_loss, round)
 
-    save_PATH = os.path.join(args.save_path, experiment)
-    torch.save(model.state_dict(), save_PATH)
+    if args.model_save:
+        os.makedirs(args.save_path, exist_ok=True)
+        save_PATH = os.path.join(args.save_path, experiment) + '.pt'
+        torch.save(model.state_dict(), save_PATH)
 
     print("=== Centralized ===")
-    center_model =  CNN().to(device)
+    """
+    center_model = CNN().to(device)
     for epoch in tqdm(range(200)):
-        train_epoch(center_model, train_loader, args)
-    acc, loss = test_epoch(center_model, test_loader, device)
+        train_epoch(center_model, train_loader, args, device)
+    acc, loss, _ = test_epoch(center_model, test_loader, device)
     print(acc)
+    """
 
 if __name__=='__main__':
-    main()
+    args = argparser()
+
+    if args.profile:
+        profiler = cProfile.Profile()
+        
+        profiler.enable()
+        main(args)
+        profiler.disable()
+
+        stats = pstats.Stats(profiler).sort_stats('cumtime')
+        stats.print_stats()
+    else:
+        main(args)
