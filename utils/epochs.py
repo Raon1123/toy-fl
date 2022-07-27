@@ -19,8 +19,22 @@ def get_optimizer(model, args):
     return optimizer
 
 
-@profile
+#@profile
 def test_epoch(model, dataloader, device='cuda:0', use_pbar=False):
+    """
+    Run one test epoch
+
+    Input 
+    - model: pytorch model
+    - dataloader: dataloader for test
+    - device (str, default: cuda:0): running device
+    - use_pbar (bool): using progress bar?
+
+    Output
+    - acc: accuracy
+    - total_loss: total sum of loss
+    - avg_loss: total average of loss
+    """
     if use_pbar:
         pbar = tqdm(dataloader, desc='Test epoch')
     else:
@@ -47,7 +61,7 @@ def test_epoch(model, dataloader, device='cuda:0', use_pbar=False):
 
     return acc, total_loss, avg_loss
 
-@profile
+#@profile
 def train_epoch(model, dataloader, args, device='cuda:0', use_pbar=False):
     if use_pbar:
         pbar = tqdm(dataloader, desc='Train epoch')
@@ -75,7 +89,7 @@ def train_epoch(model, dataloader, args, device='cuda:0', use_pbar=False):
     return total_loss
 
 
-@profile
+#@profile
 def run_round(model, 
     datasets, 
     args):
@@ -86,11 +100,14 @@ def run_round(model,
     - model: FL model
     - datasets: client TensorDatasets
 
-    Output    
+    Output
+    - select_clients: selected client
+    - train_loss: total training loss
     """
 
     device = args.device
     lossf = nn.CrossEntropyLoss()
+    dataloaders = []
 
     params = {} # parameter for model
     with torch.no_grad():
@@ -98,18 +115,17 @@ def run_round(model,
             params[key] = copy.deepcopy(value)
             params[key].zero_()
 
-    loader_list = []
     loss_list = []
     total_loss = 0.0
 
     for dataset in datasets:
-        loader = data_loader = DataLoader(dataset, batch_size=args.batch_size, 
+        client_dataloader = DataLoader(dataset, batch_size=args.batch_size, 
             shuffle=True, num_workers=args.num_workers, pin_memory=args.pin_memory)
-        loader_list.append(loader)
+        dataloaders.append(client_dataloader)
     
     if args.active_algorithm != 'Random':
-        pbar = tqdm(loader_list, desc='Local learning')
-        for data_loader in pbar:
+        # pbar = tqdm(dataloaders, desc='Local loss')
+        for data_loader in dataloaders:
             _, _, loss = test_epoch(model, data_loader, device)
 
             loss_list.append(loss)
@@ -117,8 +133,9 @@ def run_round(model,
         pdf = list(map(lambda item: item/total_loss, loss_list))
     else:
         pdf = [1.0 / args.num_clients] * args.num_clients
-    selected_clients = np.random.choice(args.num_clients, args.active_selection, replace=False, p=pdf)
 
+    # Sampling client
+    selected_clients = np.random.choice(args.num_clients, args.active_selection, replace=False, p=pdf)
     print("Selected clients: ", selected_clients)
 
     total_size = 0
@@ -126,10 +143,11 @@ def run_round(model,
         client_size = len(datasets[client_idx])
         total_size += client_size
 
+    total_loss = 0.0
     for client_idx in selected_clients:
         train_dataset = datasets[client_idx]
         client_size = len(train_dataset)
-        data_loader = loader_list[client_idx]
+        data_loader = dataloaders[client_idx]
 
         copy_model = copy.deepcopy(model)
         copy_model.to(device)
@@ -140,7 +158,10 @@ def run_round(model,
                 x, y = x.to(device), y.to(device) 
                 optimizer.zero_grad()
                 outputs = copy_model(x)
+
                 loss = lossf(outputs, y)
+                total_loss += loss.detach().cpu().item()
+                
                 loss.backward()
                 optimizer.step()
 
@@ -151,3 +172,5 @@ def run_round(model,
     with torch.no_grad():
         for key, value in model.named_parameters():
             value.copy_(params[key])
+
+    return selected_clients, total_loss

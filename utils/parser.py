@@ -73,13 +73,15 @@ def argparser():
     # directory
     parser.add_argument('--data_dir', type=str, default='./data',
         help='root directory of data')
-    parser.add_argument('--num_workers', type=int, default=4)
+    parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--pin_memory', type=bool, default=True)
-    parser.add_argument('--dirichlet_alpha', type=float, default=0.2)
 
     parser.add_argument('-C', '--num_clients', type=int, default=100)
-    parser.add_argument('-R', '--num_rounds', type=int, default=2000)
-    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('-R', '--num_rounds', type=int, default=3)
+    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--dirichlet_alpha', type=float, default=0.2)
+    parser.add_argument('--divide_method', type=str, default='Dirichlet',
+        choices=['Dirichlet', 'IID', 'Samesize'])
 
     parser.add_argument('-A', '--active_selection', type=int, default=10)
     parser.add_argument('--active_algorithm', type=str, default='Random',
@@ -88,14 +90,14 @@ def argparser():
 
     # local hyperparameter
     parser.add_argument('--optimizer', type=str, default='SGD')
-    parser.add_argument('--lr', type=float, default=1e-4,
+    parser.add_argument('--lr', type=float, default=5e-3,
         help='local learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
         help='local momentum for SGD')
-    parser.add_argument('--local_epoch', type=int, default=1)
+    parser.add_argument('--local_epoch', type=int, default=3)
 
     parser.add_argument('--logdir', type=str, default='./logdir')
-    parser.add_argument('--log_freq', type=int, default=20)
+    parser.add_argument('--log_freq', type=int, default=10)
     
     parser.add_argument('--model_save', type=bool, default=False)
     parser.add_argument('--save_path', type=str, default='./save')

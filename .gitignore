@@ -4,6 +4,7 @@ runs/
 
 nohup.out
 run.sh
+bin.csv
 *lprof
 
 logdir/
