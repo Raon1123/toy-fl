@@ -71,8 +71,9 @@ def main(args):
     if args.divide_method == 'Dirichlet':
         client_size = np.random.dirichlet([alpha] * num_clients, size=1) # life is RANDOM
         client_size = np.squeeze(client_size)
+        client_size = (train_sz * client_size).astype(int) + 1
     elif args.divide_method == 'Samesize':
-        client_size = [1 / num_clients] * num_clients
+        client_size = [int(train_sz / num_clients)] * num_clients
 
     client_dist = np.random.dirichlet([alpha] * 10, size=num_clients) # distribution of client
     
@@ -87,7 +88,7 @@ def main(args):
     # sampling
     for client_id in range(num_clients):
         sample_idx = []
-        size = int(train_sz * client_size[client_id]) + 1
+        size = client_size[client_id]
         sample_dist = client_dist[client_id]
 
         for label in range(num_labels):
@@ -133,8 +134,10 @@ def main(args):
 
     writer.flush()
 
+    os.makedirs(args.save_path, exist_ok=True)
     # active bin writer
-    f = open("./bin.csv", "w"); writer = csv.writer(f)
+    bin_PATH = os.path.join(args.save_path, bin.csv)
+    f = open(bin_PATH, "w"); writer = csv.writer(f)
     for idx, bin in enumerate(active_client_bin):
         sz = len(partition[idx])
         row = [idx, bin, sz]
@@ -142,7 +145,6 @@ def main(args):
     f.close()
         
     if args.model_save:
-        os.makedirs(args.save_path, exist_ok=True)
         save_PATH = os.path.join(args.save_path, experiment) + '.pt'
         torch.save(model.state_dict(), save_PATH)
 

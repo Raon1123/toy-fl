@@ -77,7 +77,7 @@ def argparser():
     parser.add_argument('--pin_memory', type=bool, default=True)
 
     parser.add_argument('-C', '--num_clients', type=int, default=100)
-    parser.add_argument('-R', '--num_rounds', type=int, default=3)
+    parser.add_argument('-R', '--num_rounds', type=int, default=2000)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--dirichlet_alpha', type=float, default=0.2)
     parser.add_argument('--divide_method', type=str, default='Dirichlet',

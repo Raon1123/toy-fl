@@ -5,6 +5,7 @@
 - pytorch, torchvision
 - tqdm
 - tensorboard
+- [line_profiler](https://anaconda.org/conda-forge/line_profiler)
 
 # Implementation detail
 

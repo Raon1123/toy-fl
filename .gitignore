@@ -3,9 +3,10 @@ __pycache__/
 runs/
 
 nohup.out
-run.sh
-bin.csv
-*lprof
+
+*.sh
+*.out
+*.lprof
 
 logdir/
 save/

@@ -124,10 +124,11 @@ def run_round(model,
         dataloaders.append(client_dataloader)
     
     if args.active_algorithm != 'Random':
-        # pbar = tqdm(dataloaders, desc='Local loss')
+        #pbar = tqdm(dataloaders, desc='Local loss')
         for data_loader in dataloaders:
             _, _, loss = test_epoch(model, data_loader, device)
 
+            loss = np.exp(loss)
             loss_list.append(loss)
             total_loss += loss
         pdf = list(map(lambda item: item/total_loss, loss_list))
