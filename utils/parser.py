@@ -64,17 +64,30 @@ def cifar10_dict(PATH):
     return train_data, train_labels, test_data, test_labels
 
 
+def get_device(args):
+    device = None
+    if args.cpu:
+        device = 'cpu'
+    else:
+        device = 'cuda:' + args.device
+
+    assert device != None
+    return device
+
+
 def argparser():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--profile', type=bool, default=False)
-    parser.add_argument('--device', type=str, default='cuda:1')
+    parser.add_argument('--profile', action='store_true')
+    parser.add_argument('--cpu', action='store_true')
+    parser.add_argument('--device', type=str, default='0',
+        help='cuda device number')
 
     # directory
     parser.add_argument('--data_dir', type=str, default='./data',
         help='root directory of data')
-    parser.add_argument('--num_workers', type=int, default=2)
-    parser.add_argument('--pin_memory', type=bool, default=True)
+    parser.add_argument('--num_workers', type=int, default=0)
+    parser.add_argument('--pin_memory',  action='store_true')
 
     parser.add_argument('-C', '--num_clients', type=int, default=100)
     parser.add_argument('-R', '--num_rounds', type=int, default=2000)
@@ -94,12 +107,12 @@ def argparser():
         help='local learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
         help='local momentum for SGD')
-    parser.add_argument('--local_epoch', type=int, default=3)
+    parser.add_argument('--local_epoch', type=int, default=1)
 
     parser.add_argument('--logdir', type=str, default='./logdir')
     parser.add_argument('--log_freq', type=int, default=10)
     
-    parser.add_argument('--model_save', type=bool, default=False)
+    parser.add_argument('--model_save', action='store_false')
     parser.add_argument('--save_path', type=str, default='./save')
 
     args = parser.parse_args()

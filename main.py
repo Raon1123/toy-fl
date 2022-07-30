@@ -12,8 +12,9 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 from models.cnn import CNN
-from utils.parser import cifar10_dict, argparser
+from utils.parser import cifar10_dict, argparser, get_device
 from utils.epochs import test_epoch, train_epoch, run_round
+from utils.logger import log_bin, save_model
 
 def exp_str(args):
     join_list = []
@@ -36,8 +37,12 @@ def exp_str(args):
 
 
 def main(args):
-    device = args.device
+    device = get_device(args)
     experiment = exp_str(args)
+
+    print("=" * 10)
+    print("Experiment: ", experiment)
+    print("=" * 10)
     
     alpha = args.dirichlet_alpha
     num_labels = 10
@@ -79,7 +84,7 @@ def main(args):
     
     assert client_size is not None
     assert client_dist is not None
-
+    
     label_idx = []
     for label in range(num_labels):
         idx = np.where(np.array(train_labels) == label)[0]
@@ -123,40 +128,51 @@ def main(args):
         # test phase
         acc, _, avg_loss = test_epoch(model, test_loader, device)
 
-        desc = "Test Acc: %f Test Loss: %f Train loss: %f" % (acc, avg_loss, train_loss)
-        pbar.set_description(desc)
+        desc = {
+            'Test Acc': acc,
+            'Average Loss': avg_loss,
+            'Train Loss': train_loss,
+        }
+        pbar.set_postfix(desc)
 
         # logging
         if (writer is not None) and (round % args.log_freq == 0):
             writer.add_scalar('Test Acc', acc, round)
             writer.add_scalar('Loss/Test', avg_loss, round)
             writer.add_scalar('Loss/Train', train_loss, round)
-
     writer.flush()
 
     os.makedirs(args.save_path, exist_ok=True)
-    # active bin writer
-    bin_PATH = os.path.join(args.save_path, bin.csv)
-    f = open(bin_PATH, "w"); writer = csv.writer(f)
-    for idx, bin in enumerate(active_client_bin):
-        sz = len(partition[idx])
-        row = [idx, bin, sz]
-        writer.writerow(row)
-    f.close()
-        
-    if args.model_save:
-        save_PATH = os.path.join(args.save_path, experiment) + '.pt'
-        torch.save(model.state_dict(), save_PATH)
+    save_DIR = os.path.join(args.save_path, experiment)
+    os.makedirs(save_DIR, exist_ok=True)
 
-    """
-    print("=== Centralized Setting ===")
+    log_bin(active_client_bin, partition, save_DIR)
+    if args.model_save:
+        save_model(model, save_DIR) 
     
+    print("=== Centralized Setting ===")
+    acc = 0
     center_model = CNN().to(device)
-    for epoch in tqdm(range(50)):
-        train_epoch(center_model, train_loader, args, device)
-    acc, loss, _ = test_epoch(center_model, test_loader, device)
-    print(acc, loss)
-    """
+    optimizer = torch.optim.SGD(center_model.parameters(), lr=args.lr, momentum=args.momentum)
+    lossf = torch.nn.CrossEntropyLoss()
+    for _ in tqdm(range(100)):
+        total_loss = 0.0
+
+        for x, y in train_loader:
+            x, y = x.to(device), y.to(device)
+
+            optimizer.zero_grad()
+            outputs = center_model(x)
+            loss = lossf(outputs, y)
+
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.detach().cpu().item()
+
+    acc, central_loss, _ = test_epoch(center_model, test_loader, device)
+    print(acc, central_loss)
+    
 
 if __name__=='__main__':
     args = argparser()

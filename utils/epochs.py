@@ -9,6 +9,8 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from tqdm import tqdm
 
+from utils.parser import get_device
+
 def get_optimizer(model, args):
     optimizer = None
 
@@ -19,7 +21,6 @@ def get_optimizer(model, args):
     return optimizer
 
 
-#@profile
 def test_epoch(model, dataloader, device='cuda:0', use_pbar=False):
     """
     Run one test epoch
@@ -61,7 +62,7 @@ def test_epoch(model, dataloader, device='cuda:0', use_pbar=False):
 
     return acc, total_loss, avg_loss
 
-#@profile
+
 def train_epoch(model, dataloader, args, device='cuda:0', use_pbar=False):
     if use_pbar:
         pbar = tqdm(dataloader, desc='Train epoch')
@@ -89,7 +90,7 @@ def train_epoch(model, dataloader, args, device='cuda:0', use_pbar=False):
     return total_loss
 
 
-#@profile
+
 def run_round(model, 
     datasets, 
     args):
@@ -105,7 +106,7 @@ def run_round(model,
     - train_loss: total training loss
     """
 
-    device = args.device
+    device = get_device(args)
     lossf = nn.CrossEntropyLoss()
     dataloaders = []
 
