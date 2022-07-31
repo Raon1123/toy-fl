@@ -1,12 +1,10 @@
 import copy
 
 import numpy as np
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset
-
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from utils.parser import get_device
@@ -21,14 +19,14 @@ def get_optimizer(model, args):
     return optimizer
 
 
-def test_epoch(model, dataloader, device='cuda:0', use_pbar=False):
+def test_epoch(model, dataloader, device, use_pbar=False):
     """
     Run one test epoch
 
     Input 
     - model: pytorch model
     - dataloader: dataloader for test
-    - device (str, default: cuda:0): running device
+    - device
     - use_pbar (bool): using progress bar?
 
     Output
@@ -63,7 +61,7 @@ def test_epoch(model, dataloader, device='cuda:0', use_pbar=False):
     return acc, total_loss, avg_loss
 
 
-def train_epoch(model, dataloader, args, device='cuda:0', use_pbar=False):
+def train_epoch(model, dataloader, args, device, use_pbar=False):
     if use_pbar:
         pbar = tqdm(dataloader, desc='Train epoch')
     else:
@@ -90,7 +88,6 @@ def train_epoch(model, dataloader, args, device='cuda:0', use_pbar=False):
     return total_loss
 
 
-
 def run_round(model, 
     datasets, 
     args):
@@ -106,8 +103,8 @@ def run_round(model,
     - train_loss: total training loss
     """
 
-    device = get_device(args)
     lossf = nn.CrossEntropyLoss()
+    device = get_device(args)
     dataloaders = []
 
     params = {} # parameter for model
@@ -167,10 +164,12 @@ def run_round(model,
                 loss.backward()
                 optimizer.step()
 
+        # FedAVG
         with torch.no_grad():
             for key, value in copy_model.named_parameters():
                 params[key] += (client_size / total_size) * value
     
+    # apply value to global model
     with torch.no_grad():
         for key, value in model.named_parameters():
             value.copy_(params[key])

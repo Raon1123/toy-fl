@@ -1,4 +1,5 @@
 import cProfile, pstats
+from pkgutil import get_data
 
 import os
 from datetime import datetime
@@ -15,6 +16,7 @@ from models.cnn import CNN
 from utils.parser import cifar10_dict, argparser, get_device
 from utils.epochs import test_epoch, train_epoch, run_round
 from utils.logger import log_bin, save_model
+from utils.datasets import get_dataset
 
 def exp_str(args):
     join_list = []
@@ -40,9 +42,9 @@ def main(args):
     device = get_device(args)
     experiment = exp_str(args)
 
-    print("=" * 10)
+    print("=" * 20)
     print("Experiment: ", experiment)
-    print("=" * 10)
+    print("=" * 20)
     
     alpha = args.dirichlet_alpha
     num_labels = 10
@@ -55,61 +57,33 @@ def main(args):
     writer = SummaryWriter(log_dir=log_PATH)
 
     # datasets
-    data_PATH = os.path.join(args.data_dir, 'cifar-10-batches-py')
-    train_data, train_labels, test_data, test_labels = cifar10_dict(data_PATH)    
+    train_dataset, test_dataset, partition = get_dataset(args) 
 
-    train_dataset = TensorDataset(train_data, train_labels)
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
-    test_dataset = TensorDataset(test_data, test_labels)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
+    train_data, train_labels = train_dataset
+    test_data, test_labels = test_dataset
 
-    train_sz = len(train_labels)
+    train_loader = DataLoader(TensorDataset(train_data, train_labels), 
+        batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+    test_loader = DataLoader(TensorDataset(test_data, test_labels), 
+        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     # make partition
-    partition = []
     client_datasets = []
     active_client_bin = [0] * num_clients
-
-    client_size = None
-    client_dist = None
-    
-    if args.divide_method == 'Dirichlet':
-        client_size = np.random.dirichlet([alpha] * num_clients, size=1) # life is RANDOM
-        client_size = np.squeeze(client_size)
-        client_size = (train_sz * client_size).astype(int) + 1
-    elif args.divide_method == 'Samesize':
-        client_size = [int(train_sz / num_clients)] * num_clients
-
-    client_dist = np.random.dirichlet([alpha] * 10, size=num_clients) # distribution of client
-    
-    assert client_size is not None
-    assert client_dist is not None
     
     label_idx = []
     for label in range(num_labels):
         idx = np.where(np.array(train_labels) == label)[0]
         label_idx += [idx]
 
-    # sampling
-    for client_id in range(num_clients):
-        sample_idx = []
-        size = client_size[client_id]
-        sample_dist = client_dist[client_id]
-
-        for label in range(num_labels):
-            sample = int(sample_dist[label] * size)
-            sample = np.random.choice(label_idx[label], size).tolist()
-            sample_idx += sample
-
-        sample_idx = np.array(sample_idx)
-        partition.append(sample_idx)
-
-        client_data = train_data[sample_idx][:]
-        client_label = train_labels[sample_idx]
+    # make tensor dataset
+    for client_partition in partition:
+        client_data = train_data[client_partition][:]
+        client_label = train_labels[client_partition]
         client_dataset = TensorDataset(client_data, client_label)
         client_datasets.append(client_dataset)
 
-    partition_PATH = os.path.join(log_PATH, "partiton.pickle")
+    partition_PATH = os.path.join(log_PATH, args.dataset + "_partiton.pickle")
     with open(partition_PATH, "wb") as fw:
         pickle.dump(partition, fw)
 
@@ -152,9 +126,11 @@ def main(args):
     
     print("=== Centralized Setting ===")
     acc = 0
+
     center_model = CNN().to(device)
     optimizer = torch.optim.SGD(center_model.parameters(), lr=args.lr, momentum=args.momentum)
     lossf = torch.nn.CrossEntropyLoss()
+
     for _ in tqdm(range(100)):
         total_loss = 0.0
 

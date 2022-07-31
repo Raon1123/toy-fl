@@ -6,6 +6,8 @@ import torch
 import torchvision.transforms as transforms
 import numpy as np
 
+from utils.consts import *
+
 def unpickle(file):
     with open(file, 'rb') as fo:
         dict = pickle.load(fo, encoding='bytes')
@@ -86,6 +88,9 @@ def argparser():
     # directory
     parser.add_argument('--data_dir', type=str, default='./data',
         help='root directory of data')
+    parser.add_argument('--dataset', type=str, default='cifar10',
+        choices=DATASET,
+        help='experiment dataset')
     parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--pin_memory',  action='store_true')
 
@@ -93,8 +98,8 @@ def argparser():
     parser.add_argument('-R', '--num_rounds', type=int, default=2000)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--dirichlet_alpha', type=float, default=0.2)
-    parser.add_argument('--divide_method', type=str, default='Dirichlet',
-        choices=['Dirichlet', 'IID', 'Samesize'])
+    parser.add_argument('--divide_method', type=str, default='uniform',
+        choices=['Dirichlet', 'IID', 'uniform'])
 
     parser.add_argument('-A', '--active_selection', type=int, default=10)
     parser.add_argument('--active_algorithm', type=str, default='Random',
