@@ -1,6 +1,8 @@
 import os
 import csv
+
 import torch
+import numpy as np
 
 def log_bin(bins, partition, bin_DIR):
     os.makedirs(bin_DIR, exist_ok=True)
@@ -19,3 +21,12 @@ def log_bin(bins, partition, bin_DIR):
 def save_model(model, model_DIR):
     save_PATH = os.path.join(model_DIR, 'save.pt')
     torch.save(model.state_dict(), save_PATH)
+
+
+def save_loss(loss_array, round, save_DIR):
+    if type(round) is not str:
+        round = str(round)
+
+    loss_PATH = os.path.join(save_DIR, 'loss_' + round + '.npy')
+
+    np.save(loss_PATH, loss_array)

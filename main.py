@@ -8,20 +8,21 @@ import pickle, csv
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
+from torchvision.models import resnet18
 from tqdm import tqdm
 
 from torch.utils.tensorboard import SummaryWriter
 
 from models.cnn import CNN
-from utils.parser import cifar10_dict, argparser, get_device
+from utils.parser import argparser, get_device
 from utils.epochs import test_epoch, train_epoch, run_round
-from utils.logger import log_bin, save_model
+from utils.logger import log_bin, save_model, save_loss
 from utils.datasets import get_dataset
 
 def exp_str(args):
     join_list = []
 
-    model_str = 'CNN'
+    model_str = args.model
     join_list.append(model_str)
 
     active_str = args.active_algorithm
@@ -56,6 +57,10 @@ def main(args):
     log_PATH = os.path.join(args.logdir, experiment)
     writer = SummaryWriter(log_dir=log_PATH)
 
+    os.makedirs(args.save_path, exist_ok=True)
+    save_DIR = os.path.join(args.save_path, experiment)
+    os.makedirs(save_DIR, exist_ok=True)
+
     # datasets
     train_dataset, test_dataset, partition = get_dataset(args) 
 
@@ -66,7 +71,7 @@ def main(args):
         batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
     test_loader = DataLoader(TensorDataset(test_data, test_labels), 
         batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
-
+    
     # make partition
     client_datasets = []
     active_client_bin = [0] * num_clients
@@ -88,12 +93,20 @@ def main(args):
         pickle.dump(partition, fw)
 
     # hyperparam
-    model = CNN().to(device)
+    if args.model == 'CNN':
+        model = CNN()
+    elif args.model == 'ResNet18':
+        model = resnet18(num_classes=num_labels)
+    model = model.to(device)
+
+    loss_array = None
 
     # train phase
     pbar = tqdm(range(num_rounds), desc='FL round')
     for round in pbar:
-        active_idx, train_loss = run_round(model, client_datasets, args)
+        active_idx, loss_array = run_round(model, client_datasets, args, loss_array)
+
+        train_loss = np.sum(loss_array)
 
         # bin count
         for idx in active_idx:
@@ -110,57 +123,69 @@ def main(args):
         pbar.set_postfix(desc)
 
         # logging
-        if (writer is not None) and (round % args.log_freq == 0):
-            writer.add_scalar('Test Acc', acc, round)
-            writer.add_scalar('Loss/Test', avg_loss, round)
-            writer.add_scalar('Loss/Train', train_loss, round)
-    writer.flush()
+        if (writer is not None) and ((round + 1) % args.log_freq == 0):
+            prefix = 'FL'
+            writer.add_scalar(prefix+'/Test Acc', acc, round)
+            writer.add_scalar(prefix+'/Test Loss', avg_loss, round)
+            writer.add_scalar(prefix+'/Train Loss', train_loss, round)
+            save_loss(loss_array, round, save_DIR)
 
-    os.makedirs(args.save_path, exist_ok=True)
-    save_DIR = os.path.join(args.save_path, experiment)
-    os.makedirs(save_DIR, exist_ok=True)
+    writer.flush()
 
     log_bin(active_client_bin, partition, save_DIR)
     if args.model_save:
         save_model(model, save_DIR) 
     
+
+def central_main(args):
+    device = get_device(args)
+    experiment = exp_str(args)
+
+    log_PATH = os.path.join(args.logdir, experiment)
+    writer = SummaryWriter(log_dir=log_PATH)
+
+    os.makedirs(args.save_path, exist_ok=True)
+    save_DIR = os.path.join(args.save_path, experiment)
+    os.makedirs(save_DIR, exist_ok=True)
+
+    train_dataset, test_dataset, _, num_labels = get_dataset(args)
+
+    train_loader = DataLoader(train_dataset, 
+        batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+    test_loader = DataLoader(test_dataset, 
+        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+
     print("=== Centralized Setting ===")
-    acc = 0
-
-    center_model = CNN().to(device)
-    optimizer = torch.optim.SGD(center_model.parameters(), lr=args.lr, momentum=args.momentum)
-    lossf = torch.nn.CrossEntropyLoss()
-
-    for _ in tqdm(range(100)):
-        total_loss = 0.0
-
-        for x, y in train_loader:
-            x, y = x.to(device), y.to(device)
-
-            optimizer.zero_grad()
-            outputs = center_model(x)
-            loss = lossf(outputs, y)
-
-            loss.backward()
-            optimizer.step()
-
-            total_loss += loss.detach().cpu().item()
-
-    acc, central_loss, _ = test_epoch(center_model, test_loader, device)
-    print(acc, central_loss)
     
+    if args.model == 'CNN':
+        center_model = CNN()
+    elif args.model == 'ResNet18':
+        center_model = resnet18(num_classes=num_labels)
+    center_model = center_model.to(device)
+
+    acc = 0
+    test_loss = 0.0
+
+    pbar = tqdm(range(args.central_epoch))
+
+    for epoch in pbar:
+        train_loss, test_loss = 0.0, 0.0
+        train_loss = train_epoch(center_model, train_loader, args, device)
+        
+        if (writer is not None) and ((epoch + 1) % args.log_freq == 0):
+            acc, test_loss = test_epoch(center_model, test_loader, device)
+            prefix = 'Centralized'
+            writer.add_scalar(prefix+'/Test Acc', acc, epoch)
+            writer.add_scalar(prefix+'/Test Loss', test_loss, epoch)
+            writer.add_scalar(prefix+'/Train Loss', train_loss, epoch)
+            pbar.set_postfix({'Acc': acc, 'Test loss': test_loss, 'Train loss': train_loss})
+    writer.flush()
+
 
 if __name__=='__main__':
     args = argparser()
 
-    if args.profile:
-        profiler = cProfile.Profile()
-        
-        profiler.enable()
+    if not args.centralized:
         main(args)
-        profiler.disable()
-
-        stats = pstats.Stats(profiler).sort_stats('cumtime')
-        stats.print_stats()
-    else:
-        main(args)
+    
+    central_main(args)

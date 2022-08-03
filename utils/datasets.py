@@ -1,7 +1,10 @@
 import os
 
 import numpy as np
+import torchvision
+import torchvision.transforms as transforms
 from torch.utils.data import TensorDataset
+
 
 from utils.parser import cifar10_dict
 
@@ -44,11 +47,29 @@ def get_dataset(args):
     """
     if args.dataset == 'cifar10':
         num_labels = 10
-        data_PATH = os.path.join(args.data_dir, 'cifar-10-batches-py')
-        train_data, train_labels, test_data, test_labels = cifar10_dict(data_PATH)    
+        transform = transforms.Compose(
+            [transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+        train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                        download=True, transform=transform)
+        test_dataset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                        download=True, transform=transform)    
+    elif args.dataset == 'cifar100':
+        num_labels = 100
+        train_dataset = torchvision.datasets.CIFAR100(root='./data', train=True,
+                                        download=True, transform=transform)
+        test_dataset = torchvision.datasets.CIFAR100(root='./data', train=False,
+                                        download=True, transform=transform)
+    elif args.dataset == 'femnist':
+        num_labels = 10
+        train_dataset = torchvision.datasets.CIFAR100(root='./data', train=True,
+                                        download=True, transform=transform)
+        test_dataset = torchvision.datasets.CIFAR100(root='./data', train=False,
+                                        download=True, transform=transform)
     else:
         raise Exception('Wrong dataset')
 
+    train_labels = train_dataset.targets
     train_size = len(train_labels)
 
     label_idx = []
@@ -58,7 +79,4 @@ def get_dataset(args):
 
     partition = get_partition(args, label_idx, train_size, num_labels)
 
-    train_dataset = (train_data, train_labels)
-    test_dataset = (test_data, test_labels)
-
-    return train_dataset, test_dataset, partition
+    return train_dataset, test_dataset, partition, num_labels

@@ -39,8 +39,10 @@ def test_epoch(model, dataloader, device, use_pbar=False):
     else:
         pbar = dataloader
 
+    model.eval()
+
     total, correct = 0, 0
-    total_loss = 0.0
+    running_loss = 0.0
     lossf = nn.CrossEntropyLoss()
 
     with torch.no_grad():
@@ -48,17 +50,17 @@ def test_epoch(model, dataloader, device, use_pbar=False):
             imgs, labels = imgs.to(device), labels.to(device) 
 
             outputs = model(imgs)
-            _, pred= torch.max(outputs.data, 1)
+            loss = lossf(outputs, labels)
+            _, pred = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (pred == labels).sum().item()
 
-            loss = lossf(outputs, labels)
-            total_loss += loss.detach().cpu().item()
+            running_loss += loss.item()
 
     acc = 100 * correct / total
-    avg_loss = total_loss / total
+    test_loss = running_loss / total
 
-    return acc, total_loss, avg_loss
+    return acc, test_loss
 
 
 def train_epoch(model, dataloader, args, device, use_pbar=False):
@@ -68,7 +70,7 @@ def train_epoch(model, dataloader, args, device, use_pbar=False):
         pbar = dataloader
 
     # total, correct = 0, 0
-    total_loss = 0.0
+    running_loss = 0.0
 
     optimizer = get_optimizer(model, args)
     lossf = nn.CrossEntropyLoss()
@@ -83,14 +85,15 @@ def train_epoch(model, dataloader, args, device, use_pbar=False):
         loss.backward()
         optimizer.step()
 
-        total_loss += loss.detach().cpu().item()
+        running_loss += loss.detach().cpu().item()
 
-    return total_loss
+    return running_loss
 
 
 def run_round(model, 
     datasets, 
-    args):
+    args,
+    prev_loss=None):
     """
     Run one FL round
 
@@ -123,12 +126,18 @@ def run_round(model,
     
     if args.active_algorithm != 'Random':
         #pbar = tqdm(dataloaders, desc='Local loss')
-        for data_loader in dataloaders:
-            _, _, loss = test_epoch(model, data_loader, device)
+        if prev_loss is None:
+            for data_loader in dataloaders:
+                _, _, loss = test_epoch(model, data_loader, device)
 
-            loss = np.exp(loss)
-            loss_list.append(loss)
-            total_loss += loss
+                loss = np.exp(loss)
+                loss_list.append(loss)
+                total_loss += loss
+        else:
+            loss_array = np.exp(prev_loss)
+            total_loss = np.sum(loss_array)
+            loss_list = loss_array.tolist()
+                
         pdf = list(map(lambda item: item/total_loss, loss_list))
     else:
         pdf = [1.0 / args.num_clients] * args.num_clients
@@ -137,12 +146,11 @@ def run_round(model,
     selected_clients = np.random.choice(args.num_clients, args.active_selection, replace=False, p=pdf)
     print("Selected clients: ", selected_clients)
 
-    total_size = 0
+    train_size = 0
     for client_idx in selected_clients:
         client_size = len(datasets[client_idx])
-        total_size += client_size
+        train_size += client_size
 
-    total_loss = 0.0
     for client_idx in selected_clients:
         train_dataset = datasets[client_idx]
         client_size = len(train_dataset)
@@ -159,19 +167,24 @@ def run_round(model,
                 outputs = copy_model(x)
 
                 loss = lossf(outputs, y)
-                total_loss += loss.detach().cpu().item()
-                
                 loss.backward()
                 optimizer.step()
 
         # FedAVG
         with torch.no_grad():
             for key, value in copy_model.named_parameters():
-                params[key] += (client_size / total_size) * value
+                params[key] += (client_size / train_size) * value
     
     # apply value to global model
     with torch.no_grad():
         for key, value in model.named_parameters():
             value.copy_(params[key])
 
-    return selected_clients, total_loss
+    loss_list = []
+    for data_loader in dataloaders:
+        _, cum_loss, _ = test_epoch(model, data_loader, device)
+        loss_list.append(cum_loss)
+
+    loss_array = np.array(loss_list)
+
+    return selected_clients, loss_array

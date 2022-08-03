@@ -96,7 +96,9 @@ def argparser():
 
     parser.add_argument('-C', '--num_clients', type=int, default=100)
     parser.add_argument('-R', '--num_rounds', type=int, default=2000)
-    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--model', type=str, default='CNN',
+        choices=['ResNet18', 'CNN'])
+    parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--dirichlet_alpha', type=float, default=0.2)
     parser.add_argument('--divide_method', type=str, default='uniform',
         choices=['Dirichlet', 'IID', 'uniform'])
@@ -119,6 +121,10 @@ def argparser():
     
     parser.add_argument('--model_save', action='store_false')
     parser.add_argument('--save_path', type=str, default='./save')
+
+    # Centralized setting
+    parser.add_argument('--centralized', action='store_true')
+    parser.add_argument('--central_epoch', type=int, default=500)
 
     args = parser.parse_args()
     return args
