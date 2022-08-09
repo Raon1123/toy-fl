@@ -105,11 +105,11 @@ def argparser():
 
     parser.add_argument('--divide_dirichlet', type=float, default=10,
         help='divide method')
-    parser.add_argument('--divide_method', type=str, default='Random',
+    parser.add_argument('--divide_method', type=str, default='uniform',
         choices=['Dirichlet', 'IID', 'uniform'])
 
     parser.add_argument('-A', '--active_selection', type=int, default=10)
-    parser.add_argument('--active_algorithm', type=str, default='uniform',
+    parser.add_argument('--active_algorithm', type=str, default='Random',
         choices=['Random', 'LossSampling'],
         help='Active client selection strategy')
 
