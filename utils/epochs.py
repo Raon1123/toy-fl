@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from utils.parser import get_device
@@ -19,6 +19,7 @@ def get_optimizer(model, args):
     return optimizer
 
 
+#@profile
 def test_epoch(model, dataloader, device, use_pbar=False):
     """
     Run one test epoch
@@ -32,7 +33,6 @@ def test_epoch(model, dataloader, device, use_pbar=False):
     Output
     - acc: accuracy
     - total_loss: total sum of loss
-    - avg_loss: total average of loss
     """
     if use_pbar:
         pbar = tqdm(dataloader, desc='Test epoch')
@@ -58,12 +58,11 @@ def test_epoch(model, dataloader, device, use_pbar=False):
             running_loss += loss.item()
 
     acc = 100 * correct / total
-    test_loss = running_loss / total
 
-    return acc, test_loss
+    return acc, (running_loss / total)
 
 
-def train_epoch(model, dataloader, args, device, use_pbar=False):
+def train_epoch(model, optimizer, lossf, dataloader, args, device, use_pbar=False):
     if use_pbar:
         pbar = tqdm(dataloader, desc='Train epoch')
     else:
@@ -71,9 +70,6 @@ def train_epoch(model, dataloader, args, device, use_pbar=False):
 
     # total, correct = 0, 0
     running_loss = 0.0
-
-    optimizer = get_optimizer(model, args)
-    lossf = nn.CrossEntropyLoss()
 
     for x, y in pbar:
         x, y = x.to(device), y.to(device)
@@ -90,8 +86,10 @@ def train_epoch(model, dataloader, args, device, use_pbar=False):
     return running_loss
 
 
+#@profile
 def run_round(model, 
     datasets, 
+    partitions,
     args,
     prev_loss=None):
     """
@@ -119,16 +117,22 @@ def run_round(model,
     loss_list = []
     total_loss = 0.0
 
-    for dataset in datasets:
-        client_dataloader = DataLoader(dataset, batch_size=args.batch_size, 
+    """
+    for partition in partitions:
+        datasubset = Subset(datasets, partition)
+        client_dataloader = DataLoader(datasubset, batch_size=args.batch_size, 
             shuffle=True, num_workers=args.num_workers, pin_memory=args.pin_memory)
         dataloaders.append(client_dataloader)
-    
+    """
     if args.active_algorithm != 'Random':
         #pbar = tqdm(dataloaders, desc='Local loss')
         if prev_loss is None:
-            for data_loader in dataloaders:
-                _, _, loss = test_epoch(model, data_loader, device)
+            for partition in partitions:
+                datasubset = Subset(datasets, partition)
+                dataloader = DataLoader(datasubset, batch_size=args.batch_size, 
+                    shuffle=True, num_workers=args.num_workers, 
+                    pin_memory=args.pin_memory)
+                _, loss = test_epoch(model, dataloader, device)
 
                 loss = np.exp(loss)
                 loss_list.append(loss)
@@ -144,27 +148,30 @@ def run_round(model,
 
     # Sampling client
     selected_clients = np.random.choice(args.num_clients, args.active_selection, replace=False, p=pdf)
-    print("Selected clients: ", selected_clients)
+    # print("Selected clients: ", selected_clients)
 
     train_size = 0
     for client_idx in selected_clients:
-        client_size = len(datasets[client_idx])
+        client_size = len(partitions[client_idx])
         train_size += client_size
 
     for client_idx in selected_clients:
-        train_dataset = datasets[client_idx]
-        client_size = len(train_dataset)
-        data_loader = dataloaders[client_idx]
+        train_partition = partitions[client_idx]
+        client_size = len(train_partition)
+
+        datasubset = Subset(datasets, train_partition)
+        client_dataloader = DataLoader(datasubset, batch_size=args.batch_size, 
+            shuffle=True, num_workers=args.num_workers, pin_memory=args.pin_memory)
 
         copy_model = copy.deepcopy(model)
         copy_model.to(device)
         optimizer = optim.SGD(copy_model.parameters(), lr=args.lr, momentum=args.momentum)
 
         for _ in range(args.local_epoch):
-            for x, y in data_loader:
-                x, y = x.to(device), y.to(device) 
+            for data in client_dataloader:
+                X, y = data[0].to(device), data[1].to(device) 
                 optimizer.zero_grad()
-                outputs = copy_model(x)
+                outputs = copy_model(X)
 
                 loss = lossf(outputs, y)
                 loss.backward()
@@ -181,9 +188,15 @@ def run_round(model,
             value.copy_(params[key])
 
     loss_list = []
-    for data_loader in dataloaders:
-        _, cum_loss, _ = test_epoch(model, data_loader, device)
-        loss_list.append(cum_loss)
+    for partition in partitions:
+        datasubset = Subset(datasets, partition)
+        dataloader = DataLoader(datasubset, batch_size=args.batch_size, 
+            shuffle=True, num_workers=args.num_workers, 
+            pin_memory=args.pin_memory)
+        _, loss = test_epoch(model, dataloader, device)
+
+        loss = np.exp(loss)
+        loss_list.append(loss)
 
     loss_array = np.array(loss_list)
 

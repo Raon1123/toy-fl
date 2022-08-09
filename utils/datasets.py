@@ -13,13 +13,22 @@ def get_partition(args, label_idx, data_size, num_labels):
 
     num_clients = args.num_clients
 
-    if args.divide_method == 'uniform':
+    if args.client_distribution == 'uniform':
         client_size = [int(data_size / num_clients)] * num_clients
+    elif args.client_distribution == 'Dirichlet':
+        client_size = np.random.dirichlet(np.ones(num_clients)*args.divide_dirichlet, size=1)
+        client_size = np.squeeze(client_size)
     else:
-        raise Exception('Wrong divide method')        
+        raise Exception('Wrong client distribution method')        
 
     # FIXIT: how to distribute non-iid?
-    client_dist = np.random.dirichlet([args.dirichlet_alpha] * 10, size=num_clients)
+    if args.divide_method == 'Dirichlet':
+        client_dist = np.random.dirichlet([args.dirichlet_alpha] * 1.0 * num_labels, 
+            size=num_clients)
+    elif args.divide_method == 'uniform':
+        client_dist = np.full((num_clients, num_labels), 1.0 / num_labels)
+    else:
+        raise Exception('Wrong divide method') 
 
     for client_id in range(num_clients):
         sample_idx = []
@@ -27,8 +36,8 @@ def get_partition(args, label_idx, data_size, num_labels):
         sample_dist = client_dist[client_id]
 
         for label in range(num_labels):
-            sample = int(sample_dist[label] * size)
-            sample = np.random.choice(label_idx[label], size).tolist()
+            label_size = int(sample_dist[label] * size)
+            sample = np.random.choice(label_idx[label], label_size).tolist()
             sample_idx += sample
 
         sample_idx = np.array(sample_idx)

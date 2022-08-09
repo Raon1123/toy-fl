@@ -7,6 +7,8 @@ import pickle, csv
 
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from torchvision.models import resnet18
 from tqdm import tqdm
@@ -39,7 +41,7 @@ def exp_str(args):
     return ret
 
 
-def main(args):
+def main(args, writer):
     device = get_device(args)
     experiment = exp_str(args)
 
@@ -47,46 +49,19 @@ def main(args):
     print("Experiment: ", experiment)
     print("=" * 20)
     
-    alpha = args.dirichlet_alpha
-    num_labels = 10
     num_clients = args.num_clients
-
     num_rounds = args.num_rounds
-    writer = None
-
-    log_PATH = os.path.join(args.logdir, experiment)
-    writer = SummaryWriter(log_dir=log_PATH)
 
     os.makedirs(args.save_path, exist_ok=True)
     save_DIR = os.path.join(args.save_path, experiment)
     os.makedirs(save_DIR, exist_ok=True)
 
     # datasets
-    train_dataset, test_dataset, partition = get_dataset(args) 
+    train_dataset, test_dataset, partition, num_labels = get_dataset(args) 
 
-    train_data, train_labels = train_dataset
-    test_data, test_labels = test_dataset
-
-    train_loader = DataLoader(TensorDataset(train_data, train_labels), 
-        batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-    test_loader = DataLoader(TensorDataset(test_data, test_labels), 
+    test_loader = DataLoader(test_dataset, 
         batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
-    
-    # make partition
-    client_datasets = []
     active_client_bin = [0] * num_clients
-    
-    label_idx = []
-    for label in range(num_labels):
-        idx = np.where(np.array(train_labels) == label)[0]
-        label_idx += [idx]
-
-    # make tensor dataset
-    for client_partition in partition:
-        client_data = train_data[client_partition][:]
-        client_label = train_labels[client_partition]
-        client_dataset = TensorDataset(client_data, client_label)
-        client_datasets.append(client_dataset)
 
     partition_PATH = os.path.join(log_PATH, args.dataset + "_partiton.pickle")
     with open(partition_PATH, "wb") as fw:
@@ -104,7 +79,7 @@ def main(args):
     # train phase
     pbar = tqdm(range(num_rounds), desc='FL round')
     for round in pbar:
-        active_idx, loss_array = run_round(model, client_datasets, args, loss_array)
+        active_idx, loss_array = run_round(model, train_dataset, partition, args, loss_array)
 
         train_loss = np.sum(loss_array)
 
@@ -113,12 +88,12 @@ def main(args):
             active_client_bin[idx] = active_client_bin[idx] + 1
 
         # test phase
-        acc, _, avg_loss = test_epoch(model, test_loader, device)
+        acc, test_loss = test_epoch(model, test_loader, device)
 
         desc = {
             'Test Acc': acc,
-            'Average Loss': avg_loss,
-            'Train Loss': train_loss,
+            'Test Loss': test_loss,
+            'Train Loss': train_loss
         }
         pbar.set_postfix(desc)
 
@@ -126,7 +101,7 @@ def main(args):
         if (writer is not None) and ((round + 1) % args.log_freq == 0):
             prefix = 'FL'
             writer.add_scalar(prefix+'/Test Acc', acc, round)
-            writer.add_scalar(prefix+'/Test Loss', avg_loss, round)
+            writer.add_scalar(prefix+'/Test Loss', test_loss, round)
             writer.add_scalar(prefix+'/Train Loss', train_loss, round)
             save_loss(loss_array, round, save_DIR)
 
@@ -137,12 +112,9 @@ def main(args):
         save_model(model, save_DIR) 
     
 
-def central_main(args):
+def central_main(args, writer):
     device = get_device(args)
     experiment = exp_str(args)
-
-    log_PATH = os.path.join(args.logdir, experiment)
-    writer = SummaryWriter(log_dir=log_PATH)
 
     os.makedirs(args.save_path, exist_ok=True)
     save_DIR = os.path.join(args.save_path, experiment)
@@ -162,6 +134,8 @@ def central_main(args):
     elif args.model == 'ResNet18':
         center_model = resnet18(num_classes=num_labels)
     center_model = center_model.to(device)
+    optimizer = optim.SGD(center_model.parameters(), lr=args.lr, momentum=args.momentum)
+    lossf = nn.CrossEntropyLoss()
 
     acc = 0
     test_loss = 0.0
@@ -170,7 +144,7 @@ def central_main(args):
 
     for epoch in pbar:
         train_loss, test_loss = 0.0, 0.0
-        train_loss = train_epoch(center_model, train_loader, args, device)
+        train_loss = train_epoch(center_model, optimizer, lossf, train_loader, args, device)
         
         if (writer is not None) and ((epoch + 1) % args.log_freq == 0):
             acc, test_loss = test_epoch(center_model, test_loader, device)
@@ -185,7 +159,12 @@ def central_main(args):
 if __name__=='__main__':
     args = argparser()
 
+    experiment = exp_str(args)
+    log_PATH = os.path.join(args.logdir, experiment)
+    writer = SummaryWriter(log_dir=log_PATH)
+
+    print(args.centralized)
     if not args.centralized:
-        main(args)
+        main(args, writer)
     
-    central_main(args)
+    central_main(args, writer)
