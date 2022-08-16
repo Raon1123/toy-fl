@@ -113,7 +113,7 @@ def argparser():
         choices=['Random', 'LossSampling'],
         help='Active client selection strategy')
 
-    # local hyperparameter
+    # local hyperparametercd
     parser.add_argument('--optimizer', type=str, default='SGD')
     parser.add_argument('--lr', type=float, default=5e-3,
         help='local learning rate')

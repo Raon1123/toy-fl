@@ -54,26 +54,29 @@ def get_dataset(args):
     - test_dataset: (test_data, test_labels)
     - partition
     """
-    if args.dataset == 'cifar10':
-        num_labels = 10
-        transform = transforms.Compose(
+    transform = transforms.Compose(
             [transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    if args.dataset == 'cifar10':
+        num_labels = 10
+        in_channel = 3
         train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                         download=True, transform=transform)
         test_dataset = torchvision.datasets.CIFAR10(root='./data', train=False,
                                         download=True, transform=transform)    
     elif args.dataset == 'cifar100':
         num_labels = 100
+        in_channel = 3
         train_dataset = torchvision.datasets.CIFAR100(root='./data', train=True,
                                         download=True, transform=transform)
         test_dataset = torchvision.datasets.CIFAR100(root='./data', train=False,
                                         download=True, transform=transform)
-    elif args.dataset == 'femnist':
+    elif args.dataset == 'fmnist':
         num_labels = 10
-        train_dataset = torchvision.datasets.CIFAR100(root='./data', train=True,
+        in_channel = 1
+        train_dataset = torchvision.datasets.FashionMNIST(root='./data', train=True,
                                         download=True, transform=transform)
-        test_dataset = torchvision.datasets.CIFAR100(root='./data', train=False,
+        test_dataset = torchvision.datasets.FashionMNIST(root='./data', train=False,
                                         download=True, transform=transform)
     else:
         raise Exception('Wrong dataset')
@@ -88,4 +91,4 @@ def get_dataset(args):
 
     partition = get_partition(args, label_idx, train_size, num_labels)
 
-    return train_dataset, test_dataset, partition, num_labels
+    return train_dataset, test_dataset, partition, num_labels, in_channel

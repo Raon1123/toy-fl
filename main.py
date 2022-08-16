@@ -57,7 +57,7 @@ def main(args, writer):
     os.makedirs(save_DIR, exist_ok=True)
 
     # datasets
-    train_dataset, test_dataset, partition, num_labels = get_dataset(args) 
+    train_dataset, test_dataset, partition, num_classes, in_channel = get_dataset(args) 
 
     test_loader = DataLoader(test_dataset, 
         batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
@@ -69,9 +69,9 @@ def main(args, writer):
 
     # hyperparam
     if args.model == 'CNN':
-        model = CNN()
+        model = CNN(in_channel=in_channel, num_classes=num_classes)
     elif args.model == 'ResNet18':
-        model = resnet18(num_classes=num_labels)
+        model = resnet18(num_classes=num_classes)
     model = model.to(device)
 
     loss_array = None
@@ -120,7 +120,7 @@ def central_main(args, writer):
     save_DIR = os.path.join(args.save_path, experiment)
     os.makedirs(save_DIR, exist_ok=True)
 
-    train_dataset, test_dataset, _, num_labels = get_dataset(args)
+    train_dataset, test_dataset, _, num_classes, in_channel = get_dataset(args)
 
     train_loader = DataLoader(train_dataset, 
         batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
@@ -130,9 +130,9 @@ def central_main(args, writer):
     print("=== Centralized Setting ===")
     
     if args.model == 'CNN':
-        center_model = CNN()
+        center_model = CNN(num_classes=num_classes, in_channel=in_channel)
     elif args.model == 'ResNet18':
-        center_model = resnet18(num_classes=num_labels)
+        center_model = resnet18(num_classes=num_classes, in_channel=in_channel)
     center_model = center_model.to(device)
     optimizer = optim.SGD(center_model.parameters(), lr=args.lr, momentum=args.momentum)
     lossf = nn.CrossEntropyLoss()
@@ -156,15 +156,23 @@ def central_main(args, writer):
     writer.flush()
 
 
+def write_timestamp(prefix=""):
+    now = datetime.now()
+    now_str = now.strftime('%y%m%d-%H%M%S')
+    print(prefix, now_str)
+
+
 if __name__=='__main__':
+    write_timestamp("Start")
     args = argparser()
 
     experiment = exp_str(args)
     log_PATH = os.path.join(args.logdir, experiment)
     writer = SummaryWriter(log_dir=log_PATH)
 
-    print(args.centralized)
     if not args.centralized:
         main(args, writer)
+    write_timestamp("End FL")
     
     central_main(args, writer)
+    write_timestamp("End CL")
