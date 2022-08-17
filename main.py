@@ -69,9 +69,10 @@ def main(args, writer):
 
     # hyperparam
     if args.model == 'CNN':
-        model = CNN(in_channel=in_channel, num_classes=num_classes)
+        model = CNN(num_classes=num_classes, in_channel=in_channel)
     elif args.model == 'ResNet18':
         model = resnet18(num_classes=num_classes)
+    print(model)
     model = model.to(device)
 
     loss_array = None
@@ -83,6 +84,7 @@ def main(args, writer):
 
         train_loss = np.sum(loss_array)
 
+        print(active_idx)
         # bin count
         for idx in active_idx:
             active_client_bin[idx] = active_client_bin[idx] + 1

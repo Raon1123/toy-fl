@@ -58,22 +58,25 @@ def get_dataset(args):
             [transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     if args.dataset == 'cifar10':
-        num_labels = 10
+        num_classes = 10
         in_channel = 3
         train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                         download=True, transform=transform)
         test_dataset = torchvision.datasets.CIFAR10(root='./data', train=False,
                                         download=True, transform=transform)    
     elif args.dataset == 'cifar100':
-        num_labels = 100
+        num_classes = 100
         in_channel = 3
         train_dataset = torchvision.datasets.CIFAR100(root='./data', train=True,
                                         download=True, transform=transform)
         test_dataset = torchvision.datasets.CIFAR100(root='./data', train=False,
                                         download=True, transform=transform)
     elif args.dataset == 'fmnist':
-        num_labels = 10
+        num_classes = 10
         in_channel = 1
+        transform = transforms.Compose(
+            [transforms.ToTensor(),
+            transforms.Normalize((0.5), (0.5))])
         train_dataset = torchvision.datasets.FashionMNIST(root='./data', train=True,
                                         download=True, transform=transform)
         test_dataset = torchvision.datasets.FashionMNIST(root='./data', train=False,
@@ -85,10 +88,10 @@ def get_dataset(args):
     train_size = len(train_labels)
 
     label_idx = []
-    for label in range(num_labels):
+    for label in range(num_classes):
         idx = np.where(np.array(train_labels) == label)[0]
         label_idx += [idx]
 
-    partition = get_partition(args, label_idx, train_size, num_labels)
+    partition = get_partition(args, label_idx, train_size, num_classes)
 
-    return train_dataset, test_dataset, partition, num_labels, in_channel
+    return train_dataset, test_dataset, partition, num_classes, in_channel

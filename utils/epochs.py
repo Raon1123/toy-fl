@@ -148,7 +148,7 @@ def run_round(model,
 
     # Sampling client
     selected_clients = np.random.choice(args.num_clients, args.active_selection, replace=False, p=pdf)
-    # print("Selected clients: ", selected_clients)
+    #print("Selected clients: ", selected_clients)
 
     train_size = 0
     for client_idx in selected_clients:
@@ -170,10 +170,11 @@ def run_round(model,
         for _ in range(args.local_epoch):
             for data in client_dataloader:
                 X, y = data[0].to(device), data[1].to(device) 
+
                 optimizer.zero_grad()
                 outputs = copy_model(X)
-
                 loss = lossf(outputs, y)
+
                 loss.backward()
                 optimizer.step()
 
