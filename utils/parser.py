@@ -96,7 +96,7 @@ def argparser():
     parser.add_argument('-C', '--num_clients', type=int, default=100)
     parser.add_argument('-R', '--num_rounds', type=int, default=2000)
     parser.add_argument('--model', type=str, default='CNN',
-        choices=['ResNet18', 'CNN'])
+        choices=['ResNet18', 'CNN', 'NaiveCNN'])
     parser.add_argument('--batch_size', type=int, default=32)
     
     parser.add_argument('--client_distribution', type=str, default='uniform',
@@ -130,6 +130,17 @@ def argparser():
     # Centralized setting
     parser.add_argument('--centralized', action='store_true')
     parser.add_argument('--central_epoch', type=int, default=500)
+
+    parser.add_argument('--kernel_sizes', type=int, default=[3, 3, 3], nargs="*",
+                        help='kernel size in each convolutional layer')
+    parser.add_argument('--num_filters', type=int, default=[32, 64, 64], nargs = "*",
+                        help="number of filters in each convolutional layer.")
+    parser.add_argument('--padding', action='store_true', 
+                        help='use padding in each convolutional layer')
+    parser.add_argument('--mlp_layers',type= int,default=[64,],nargs="*",
+                        help="numbers of dimensions of each hidden layer in MLP, or fc layers in CNN")
+    parser.add_argument('--depth',type = int,default = 20, 
+                        help = "The depth of ResNet. Only valid when model is resnet")
 
     args = parser.parse_args()
     return args

@@ -19,3 +19,6 @@ python3 main.py
 ```
 
 ## Argument
+
+
+The `NaiveCNN` code from FedCor implementation

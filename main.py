@@ -1,44 +1,21 @@
-import cProfile, pstats
-from pkgutil import get_data
-
 import os
-from datetime import datetime
-import pickle, csv
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-from torchvision.models import resnet18
+
 from tqdm import tqdm
 
 from torch.utils.tensorboard import SummaryWriter
 
-from models.cnn import CNN
+from models.modelutil import get_model
 from utils.parser import argparser, get_device
 from utils.epochs import test_epoch, train_epoch, run_round
 from utils.logger import log_bin, save_model, save_loss
+from utils.logger import exp_str, write_timestamp
 from utils.datasets import get_dataset
-
-def exp_str(args):
-    join_list = []
-
-    model_str = args.model
-    join_list.append(model_str)
-
-    active_str = args.active_algorithm
-    join_list.append(active_str)
-
-    dirichlet_str = 'CIFAR10_' + str(args.dirichlet_alpha)
-    join_list.append(dirichlet_str)
-
-    now = datetime.now()
-    now_str = now.strftime('%y%m%d-%H%M%S')
-    join_list.append(now_str)
-
-    ret = '_'.join(join_list)
-    return ret
 
 
 def main(args, writer):
@@ -63,16 +40,8 @@ def main(args, writer):
         batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     active_client_bin = [0] * num_clients
 
-    partition_PATH = os.path.join(log_PATH, args.dataset + "_partiton.pickle")
-    with open(partition_PATH, "wb") as fw:
-        pickle.dump(partition, fw)
-
     # hyperparam
-    if args.model == 'CNN':
-        model = CNN(num_classes=num_classes, in_channel=in_channel)
-    elif args.model == 'ResNet18':
-        model = resnet18(num_classes=num_classes)
-    print(model)
+    model = get_model(args, num_classes, in_channel)
     model = model.to(device)
 
     loss_array = None
@@ -131,10 +100,7 @@ def central_main(args, writer):
 
     print("=== Centralized Setting ===")
     
-    if args.model == 'CNN':
-        center_model = CNN(num_classes=num_classes, in_channel=in_channel)
-    elif args.model == 'ResNet18':
-        center_model = resnet18(num_classes=num_classes, in_channel=in_channel)
+    center_model = get_model(args, num_classes, in_channel)
     center_model = center_model.to(device)
     optimizer = optim.SGD(center_model.parameters(), lr=args.lr, momentum=args.momentum)
     lossf = nn.CrossEntropyLoss()
@@ -156,12 +122,6 @@ def central_main(args, writer):
             writer.add_scalar(prefix+'/Train Loss', train_loss, epoch)
             pbar.set_postfix({'Acc': acc, 'Test loss': test_loss, 'Train loss': train_loss})
     writer.flush()
-
-
-def write_timestamp(prefix=""):
-    now = datetime.now()
-    now_str = now.strftime('%y%m%d-%H%M%S')
-    print(prefix, now_str)
 
 
 if __name__=='__main__':
