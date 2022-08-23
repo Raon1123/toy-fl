@@ -5,27 +5,41 @@ import numpy as np
 import torchvision
 import torchvision.transforms as transforms
 
-def get_partition(args, label_idx, data_size, num_labels):
+from utils.parser import argparser
+
+def get_partition(args, label_idx, num_classes, data_size):
+    """
+    Generate client partition
+    - label_index(list; num_classes,): list index of label
+    - num_classes (int): number of classes in datasets
+    - data_size (int): total size of dataset
+    """
     partition = []
 
     num_clients = args.num_clients
 
+    # description
+    print("=" * 30)
+    print("Number of clients", num_clients)
+    print("=" * 30)
+
     if args.client_distribution == 'uniform':
         client_size = [int(data_size / num_clients)] * num_clients
     elif args.client_distribution == 'Dirichlet':
-        client_size = np.random.dirichlet(np.ones(num_clients)*args.divide_dirichlet, size=1)
+        client_size = np.random.dirichlet(np.ones(num_clients)*args.client_dirichlet, size=1)
         client_size = np.squeeze(client_size)
     else:
         raise Exception('Wrong client distribution method')        
 
-    # FIXIT: how to distribute non-iid?
-    if args.divide_method == 'Dirichlet':
-        client_dist = np.random.dirichlet([args.dirichlet_alpha] * 1.0 * num_labels, 
+    if args.label_distribution == 'Dirichlet':
+        client_dist = np.random.dirichlet([args.label_dirichlet] * 1.0 * num_classes, 
             size=num_clients)
-    elif args.divide_method == 'uniform':
-        client_dist = np.full((num_clients, num_labels), 1.0 / num_labels)
-    elif args.divide_method == 'random':
-        pass    
+    elif args.label_distribution == 'uniform':
+        client_dist = np.full((num_clients, num_classes), 1.0 / num_classes)
+    elif args.label_distribution == 'random':
+        candidate_data_index = []
+        for labels in label_idx:
+            candidate_data_index = candidate_data_index + labels  
     else:
         raise Exception('Wrong divide method') 
 
@@ -34,16 +48,16 @@ def get_partition(args, label_idx, data_size, num_labels):
         size = client_size[client_id]
         sample_dist = client_dist[client_id]
 
-        if args.divide_method == 'random':
-            total_idx = []
-            for labels in label_idx:
-                total_idx = total_idx + labels
-
-            sample_idx = np.random.choice(total_idx, size)
+        if args.label_distribution == 'random':
+            sample_idx = np.random.choice(candidate_data_index, size)
+            for idx in sample_idx:
+                candidate_data_index.remove(idx)
         else:
-            for label in range(num_labels):
+            for label in range(num_classes):
                 label_size = int(sample_dist[label] * size)
                 sample = np.random.choice(label_idx[label], label_size).tolist()
+                for idx in sample:
+                    label_idx[label].remove(idx)
                 sample_idx += sample
             sample_idx = np.array(sample_idx)
 
@@ -107,8 +121,14 @@ def get_dataset(args):
             partition = pickle.load(fr)
     else:
         print("Generate partition")
-        partition = get_partition(args, label_idx, train_size, num_classes)
+        partition = get_partition(args, label_idx, num_classes, train_size)
         with open(partition_PATH, "wb") as fw:
             pickle.dump(partition, fw)
     
     return train_dataset, test_dataset, partition, num_classes, in_channel
+
+
+if __name__ == "__main__":
+    args = argparser()
+    _ = get_dataset(args)
+    print("Partition Generation Done")

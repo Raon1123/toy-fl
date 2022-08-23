@@ -6,20 +6,21 @@ import torch
 import numpy as np
 
 def exp_str(args):
-    join_list = []
-
-    model_str = args.model
-    join_list.append(model_str)
-
-    active_str = args.active_algorithm
-    join_list.append(active_str)
-
-    dirichlet_str = 'CIFAR10_' + str(args.dirichlet_alpha)
-    join_list.append(dirichlet_str)
-
     now = datetime.now()
     now_str = now.strftime('%y%m%d-%H%M%S')
+
+    join_list = [args.model,
+        args.active_algorithm]
+
+    # distribution settings
+    join_list.append(args.label_distribution)
+    if args.label_distribution == 'Dirichlet':
+        join_list.append(str(args.label_dirichlet))
+
     join_list.append(now_str)
+
+    if args.postfix != '':
+        join_list.append(args.postfix)
 
     ret = '_'.join(join_list)
     return ret

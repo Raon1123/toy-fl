@@ -80,6 +80,8 @@ def get_device(args):
 def argparser():
     parser = argparse.ArgumentParser()
 
+    parser.add_argument('--postfix', type=str, default='', help='postfix of experiment')
+
     parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--device', type=str, default='0',
         help='cuda device number')
@@ -100,13 +102,16 @@ def argparser():
     parser.add_argument('--batch_size', type=int, default=32)
     
     parser.add_argument('--client_distribution', type=str, default='uniform',
-        choices=['Dirichlet', 'IID', 'uniform'])
-    parser.add_argument('--dirichlet_alpha', type=float, default=0.2)
+        choices=['Dirichlet', 'IID'],
+        help='distribution of number of clients')
+    parser.add_argument('--client_dirichlet', type=float, default=10)
 
-    parser.add_argument('--divide_dirichlet', type=float, default=10,
+    
+    parser.add_argument('--label_distribution', type=str, default='uniform',
+        choices=['Dirichlet', 'IID', 'uniform'],
+        help='distribution of labels in client')
+    parser.add_argument('--label_dirichlet', type=float, default=0.2,
         help='divide method')
-    parser.add_argument('--divide_method', type=str, default='uniform',
-        choices=['Dirichlet', 'IID', 'uniform'])
 
     parser.add_argument('-A', '--active_selection', type=int, default=10)
     parser.add_argument('--active_algorithm', type=str, default='Random',
