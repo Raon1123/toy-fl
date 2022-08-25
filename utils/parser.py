@@ -99,16 +99,15 @@ def argparser():
     parser.add_argument('-R', '--num_rounds', type=int, default=2000)
     parser.add_argument('--model', type=str, default='CNN',
         choices=['ResNet18', 'CNN', 'NaiveCNN'])
-    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--batch_size', type=int, default=50)
     
     parser.add_argument('--client_distribution', type=str, default='uniform',
         choices=['Dirichlet', 'IID'],
         help='distribution of number of clients')
-    parser.add_argument('--client_dirichlet', type=float, default=10)
+    parser.add_argument('--client_dirichlet', type=float, default=10.)
 
-    
     parser.add_argument('--label_distribution', type=str, default='uniform',
-        choices=['Dirichlet', 'IID', 'uniform'],
+        choices=['Dirichlet', 'random', 'uniform'],
         help='distribution of labels in client')
     parser.add_argument('--label_dirichlet', type=float, default=0.2,
         help='divide method')
@@ -124,7 +123,7 @@ def argparser():
         help='local learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
         help='local momentum for SGD')
-    parser.add_argument('--local_epoch', type=int, default=1)
+    parser.add_argument('--local_epoch', type=int, default=5)
 
     parser.add_argument('--logdir', type=str, default='./logdir')
     parser.add_argument('--log_freq', type=int, default=10)
