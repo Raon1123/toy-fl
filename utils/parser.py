@@ -46,7 +46,7 @@ def argparser():
     parser.add_argument('-C', '--num_clients', type=int, default=100)
     parser.add_argument('-R', '--num_rounds', type=int, default=2000)
     parser.add_argument('--model', type=str, default='CNN',
-        choices=['ResNet18', 'CNN', 'NaiveCNN'])
+        choices=MODELS)
     parser.add_argument('--batch_size', type=int, default=50)
     
     parser.add_argument('--client_distribution', type=str, default='uniform',
@@ -62,7 +62,7 @@ def argparser():
 
     parser.add_argument('-A', '--active_selection', type=int, default=10)
     parser.add_argument('--active_algorithm', type=str, default='Random',
-        choices=['Random', 'LossSampling'],
+        choices=ACTIVEALGORITHM,
         help='Active client selection strategy')
 
     # local hyperparametercd
@@ -97,13 +97,3 @@ def argparser():
     args = parser.parse_args()
     return args
 
-
-def apply_transform(imgs, transform):
-    size = imgs.shape[0]
-    results = torch.zeros((size, 3, 32, 32))
-
-    for idx in range(size):
-        img = transform(imgs[idx])
-        results[idx, :] = img
-
-    return results
