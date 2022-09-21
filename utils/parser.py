@@ -14,58 +14,6 @@ def unpickle(file):
     return dict
 
 
-def cifar10_dict(PATH):
-    """
-    Parse CIFAR10 datasets
-    
-    Outputs
-    - train_data
-    - train_labels
-    - test_data
-    - test_labels
-    """
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
-
-    # parse train batch
-    batches = 5
-    train_data, train_labels = None, None
-    
-    for batch in range(1, batches+1):
-        file_name = 'data_batch_' + str(batch)
-        file_path = os.path.join(PATH, file_name)
-
-        batch_dict = unpickle(file_path)
-        data = batch_dict[b'data']
-        labels = batch_dict[b'labels']
-
-        if train_data is None:
-            train_data = data
-            train_labels = labels
-        else:
-            train_data = np.concatenate((train_data, data))
-            train_labels = np.concatenate((train_labels, labels))
-    
-    # parse test batch
-    file_name = 'test_batch'
-    file_path = os.path.join(PATH, file_name)
-    batch_dict = unpickle(file_path)
-    test_data = batch_dict[b'data']
-    test_labels = batch_dict[b'labels']
-
-    train_data = np.reshape(train_data, (-1,32,32,3))
-    train_data = apply_transform(train_data, transform)
-    test_data = np.reshape(test_data, (-1,32,32,3))
-    test_data = apply_transform(test_data, transform)
-
-    train_labels = torch.Tensor(train_labels).type(torch.long)
-    test_labels = torch.Tensor(test_labels).type(torch.long)
-
-    return train_data, train_labels, test_data, test_labels
-
-
 def get_device(args):
     device = None
     if args.cpu:
