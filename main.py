@@ -42,14 +42,16 @@ def main(args, writer):
 
     # hyperparam
     model = get_model(args, num_classes, in_channel)
+    print(model)
     model = model.to(device)
 
     loss_array = None
+    param_list = None
 
     # train phase
     pbar = tqdm(range(num_rounds), desc='FL round')
     for round in pbar:
-        active_idx, loss_array = run_round(model, train_dataset, partition, args, loss_array)
+        active_idx, loss_array, param_list = run_round(model, train_dataset, partition, args, loss_array, param_list)
 
         train_loss = np.sum(loss_array)
 

@@ -4,6 +4,7 @@ import argparse
 
 import torch
 import torchvision.transforms as transforms
+import torch.optim as optim
 import numpy as np
 
 from utils.consts import *
@@ -25,6 +26,15 @@ def get_device(args):
     return device
 
 
+def get_optimizer(model, args):
+    optimizer = None
+
+    if args.optimizer == 'SGD':
+        optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+
+    assert optimizer is not None
+    return optimizer
+
 def argparser():
     parser = argparse.ArgumentParser()
 
@@ -43,7 +53,7 @@ def argparser():
     parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--pin_memory',  action='store_true')
 
-    parser.add_argument('-C', '--num_clients', type=int, default=100)
+    parser.add_argument('-N', '--num_clients', type=int, default=100)
     parser.add_argument('-R', '--num_rounds', type=int, default=2000)
     parser.add_argument('--model', type=str, default='CNN',
         choices=MODELS)
@@ -60,7 +70,7 @@ def argparser():
     parser.add_argument('--label_dirichlet', type=float, default=0.2,
         help='divide method')
 
-    parser.add_argument('-A', '--active_selection', type=int, default=10)
+    parser.add_argument('-C', '--active_selection', type=int, default=10)
     parser.add_argument('--active_algorithm', type=str, default='Random',
         choices=ACTIVEALGORITHM,
         help='Active client selection strategy')
