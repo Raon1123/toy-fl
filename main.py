@@ -1,4 +1,5 @@
 import os
+import copy
 
 import numpy as np
 import torch
@@ -16,6 +17,7 @@ from utils.epochs import test_epoch, train_epoch, run_round
 from utils.logger import log_bin, save_model, save_loss
 from utils.logger import exp_str, write_timestamp
 from utils.datasets import get_dataset
+from utils.toolkit import get_last_param
 
 
 def main(args, writer):
@@ -40,18 +42,32 @@ def main(args, writer):
         batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     active_client_bin = [0] * num_clients
 
-    # hyperparam
     model = get_model(args, num_classes, in_channel)
     print(model)
     model = model.to(device)
 
     loss_array = None
     param_list = None
+    prev_model = None
+    pseudograd = None
 
     # train phase
     pbar = tqdm(range(num_rounds), desc='FL round')
     for round in pbar:
-        active_idx, loss_array, param_list = run_round(model, train_dataset, partition, args, loss_array, param_list)
+        if prev_model is not None:
+            prev_last = get_last_param(prev_model)
+            curr_last = get_last_param(model)
+            pseudograd = curr_last - prev_last
+        prev_model = copy.deepcopy(model)
+
+        ret = run_round(model, 
+            train_dataset, 
+            partition, 
+            args, 
+            prev_grad=pseudograd,
+            prev_losses=loss_array, 
+            prev_params=param_list)
+        active_idx, loss_array, param_list = ret
 
         train_loss = np.sum(loss_array)
 

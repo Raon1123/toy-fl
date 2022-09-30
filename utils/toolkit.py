@@ -1,4 +1,7 @@
+import copy
+
 import torch
+import torch.nn as nn
 
 def random_pmf(num_clients):
     pmf = [1.0 / num_clients] * num_clients
@@ -11,9 +14,17 @@ def get_last_param(model):
     """
     for name, param in model.named_parameters():
         if name[-7:] == '.weight':
-            last_weight = param.detach().cpu()
+            last_weight = copy.deepcopy(param).detach().cpu()
         elif name[-5:] == '.bias':
-            last_bias = param.unsqueeze(1).detach().cpu()
+            last_bias = copy.deepcopy(param).unsqueeze(1).detach().cpu()
 
     last_param = torch.cat([last_weight, last_bias], dim=1)
     return last_param
+
+
+def get_similarity(args, vec1, vec2):
+    assert vec1.shape == vec2.shape
+
+    ret = (vec1 - vec2).pow(2).sum().sqrt().item()
+
+    return ret

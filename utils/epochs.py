@@ -8,8 +8,8 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
-from utils.parser import get_device, get_optimizer
-from utils.toolkit import random_pmf, get_last_param
+from utils.parser import get_device
+from utils.toolkit import random_pmf, get_last_param, get_similarity
 
 
 #@profile
@@ -83,6 +83,7 @@ def run_round(model,
     datasets, 
     partitions,
     args,
+    prev_grad=None,
     prev_losses=None,
     prev_params=None):
     """
@@ -91,6 +92,8 @@ def run_round(model,
     Input
     - model: FL model
     - datasets: client TensorDatasets
+    - partitions: represent elements of each client
+    - args: from arg parser
 
     Output
     - select_clients: selected client
@@ -99,7 +102,6 @@ def run_round(model,
 
     lossf = nn.CrossEntropyLoss()
     device = get_device(args)
-    dataloaders = []
 
     params = {} # parameter for model
     with torch.no_grad():
@@ -119,31 +121,28 @@ def run_round(model,
             shuffle=True, num_workers=args.num_workers, pin_memory=args.pin_memory)
         dataloaders.append(client_dataloader)
     """
-    if args.active_algorithm == 'LossSampling':
-        if prev_losses is None:
-            pmf = random_pmf(args.num_clients)
-        else:
-            loss_array = np.exp(prev_losses)
-            total_loss = np.sum(loss_array)
-            loss_list = loss_array.tolist()  
-            pmf = list(map(lambda item: item/total_loss, loss_list))
-    elif args.active_algorithm == 'GradientBADGE':
-        if prev_params is None:
-            pmf = random_pmf(args.num_clients)
-        else:
-            diff_param_list = [] # shape (N, paramshape)
-            for param in prev_params:
-                diff_param = current_param - param
-                diff_param_list.append(diff_param)
+    if args.active_algorithm == 'LossSampling' and prev_losses is not None:
+        loss_array = np.exp(prev_losses)
+        total_loss = np.sum(loss_array)
+        loss_list = loss_array.tolist()  
+        pmf = list(map(lambda item: item/total_loss, loss_list))
+    elif args.active_algorithm == 'GradientBADGE' and prev_params is not None:
         # Sampling by BADGE
-    elif args.active_algorithm == 'Random':
-        pmf = random_pmf(args.num_clients)
+        similar_list = []
+        total_sim = 0.0
+
+        for prev_param in prev_params:
+            similarity = get_similarity(args, prev_grad, prev_param)
+            total_sim += similarity
+            similar_list.append(similarity)
+
+        pmf = list(map(lambda item: item/total_sim, similar_list))
     else:
-        Exception("Wrong active algorithm: "+args.active_algorithm)
+        # Select as random
+        pmf = random_pmf(args.num_clients)
 
     # Sampling client
     selected_clients = np.random.choice(args.num_clients, args.active_selection, replace=False, p=pmf)
-    #print("Selected clients: ", selected_clients)
 
     train_size = 0
 
@@ -176,7 +175,8 @@ def run_round(model,
 
         if args.active_algorithm == 'GradientBADGE':
             last_param = get_last_param(copy_model)
-            param_list.append(current_param - last_param)
+            #last_param = last_param / client_size # normalize by client size
+            param_list.append(last_param)
 
         # FedAVG
         if client_idx in selected_clients:

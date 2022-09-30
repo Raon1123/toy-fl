@@ -12,5 +12,4 @@ def get_model(args, num_classes, in_channel):
     else:
         Exception('Wrong model definition') 
 
-    print(model)
     return model
