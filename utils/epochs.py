@@ -136,6 +136,7 @@ def run_round(model,
             total_sim += similarity
             similar_list.append(similarity)
 
+        print("similar: ", similar_list)
         pmf = list(map(lambda item: item/total_sim, similar_list))
     else:
         # Select as random
