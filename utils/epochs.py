@@ -175,7 +175,6 @@ def run_round(model,
 
         if args.active_algorithm == 'GradientBADGE':
             last_param = get_last_param(copy_model)
-            #last_param = last_param / client_size # normalize by client size
             param_list.append(last_param)
 
         # FedAVG

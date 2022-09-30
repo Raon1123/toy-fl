@@ -25,6 +25,12 @@ def get_last_param(model):
 def get_similarity(args, vec1, vec2):
     assert vec1.shape == vec2.shape
 
-    ret = (vec1 - vec2).pow(2).sum().sqrt().item()
+    vec2 = vec2 / torch.norm(vec2) # normalize vector
+
+    if args.similarity_measure == 'distance':
+        ret = (vec1 - vec2).pow(2).sum().sqrt().item()
+    elif args.similarity_measure == 'similar':
+        cos = nn.CosineSimilarity(dim=0)
+        ret = cos(vec1, vec2)
 
     return ret

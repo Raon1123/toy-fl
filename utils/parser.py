@@ -53,6 +53,7 @@ def argparser():
     parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--pin_memory',  action='store_true')
 
+    # FL settings
     parser.add_argument('-N', '--num_clients', type=int, default=100)
     parser.add_argument('-R', '--num_rounds', type=int, default=2000)
     parser.add_argument('--model', type=str, default='CNN',
@@ -70,10 +71,14 @@ def argparser():
     parser.add_argument('--label_dirichlet', type=float, default=0.2,
         help='divide method')
 
+    # active client selection settings
     parser.add_argument('-C', '--active_selection', type=int, default=10)
     parser.add_argument('--active_algorithm', type=str, default='Random',
         choices=ACTIVEALGORITHM,
         help='Active client selection strategy')
+
+    # gradient based approach
+    parser.add_argument('--similarity_measure', type=str, default='distance')
 
     # local hyperparametercd
     parser.add_argument('--optimizer', type=str, default='SGD')
