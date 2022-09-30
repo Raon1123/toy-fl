@@ -58,7 +58,7 @@ def argparser():
     parser.add_argument('-R', '--num_rounds', type=int, default=2000)
     parser.add_argument('--model', type=str, default='CNN',
         choices=MODELS)
-    parser.add_argument('--batch_size', type=int, default=50)
+    parser.add_argument('--batch_size', type=int, default=32)
     
     parser.add_argument('--client_distribution', type=str, default='uniform',
         choices=['Dirichlet', 'IID'],
@@ -89,7 +89,7 @@ def argparser():
     parser.add_argument('--local_epoch', type=int, default=5)
 
     parser.add_argument('--logdir', type=str, default='./logdir')
-    parser.add_argument('--log_freq', type=int, default=10)
+    parser.add_argument('--log_freq', type=int, default=1)
     
     parser.add_argument('--model_save', action='store_false')
     parser.add_argument('--save_path', type=str, default='./save')
