@@ -61,10 +61,11 @@ def train_epoch(model, optimizer, lossf, dataloader, args, device, use_pbar=Fals
     else:
         pbar = dataloader
 
-    # total, correct = 0, 0
+    total = 0
     running_loss = 0.0
 
     for x, y in pbar:
+        total += y.size(0)
         x, y = x.to(device), y.to(device)
 
         optimizer.zero_grad()
@@ -76,7 +77,7 @@ def train_epoch(model, optimizer, lossf, dataloader, args, device, use_pbar=Fals
 
         running_loss += loss.detach().cpu().item()
 
-    return running_loss
+    return (running_loss / total)
 
 #@profile
 def run_round(model, 
@@ -175,8 +176,8 @@ def run_round(model,
                 optimizer.step()
 
         if args.active_algorithm == 'GradientBADGE':
-            last_param = get_last_param(copy_model)
-            param_list.append(last_param)
+            client_last_param = get_last_param(copy_model)
+            param_list.append(current_param - client_last_param)
 
         # FedAVG
         if client_idx in selected_clients:

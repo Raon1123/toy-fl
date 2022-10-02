@@ -33,6 +33,6 @@ def get_similarity(args, vec1, vec2):
         ret = (vec1 - vec2).pow(2).sum().sqrt().item()
     elif args.similarity_measure == 'similar':
         cos = nn.CosineSimilarity(dim=0)
-        ret = cos(vec1, vec2).item()
+        ret = cos(vec1, vec2).abs().item()
 
     return ret
