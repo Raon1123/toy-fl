@@ -69,7 +69,7 @@ def main(args, writer):
             prev_params=param_list)
         active_idx, loss_array, param_list = ret
 
-        train_loss = np.sum(loss_array)
+        train_loss = np.average(loss_array)
 
         print(active_idx)
         # bin count
