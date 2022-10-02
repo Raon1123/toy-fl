@@ -1,4 +1,5 @@
 import copy
+from random import random
 
 import numpy as np
 import torch
@@ -8,15 +9,7 @@ from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from utils.parser import get_device
-
-def get_optimizer(model, args):
-    optimizer = None
-
-    if args.optimizer == 'SGD':
-        optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
-
-    assert optimizer is not None
-    return optimizer
+from utils.toolkit import random_pmf, get_last_param, get_similarity
 
 
 #@profile
@@ -68,10 +61,11 @@ def train_epoch(model, optimizer, lossf, dataloader, args, device, use_pbar=Fals
     else:
         pbar = dataloader
 
-    # total, correct = 0, 0
+    total = 0
     running_loss = 0.0
 
     for x, y in pbar:
+        total += y.size(0)
         x, y = x.to(device), y.to(device)
 
         optimizer.zero_grad()
@@ -83,21 +77,24 @@ def train_epoch(model, optimizer, lossf, dataloader, args, device, use_pbar=Fals
 
         running_loss += loss.detach().cpu().item()
 
-    return running_loss
-
+    return (running_loss / total)
 
 #@profile
 def run_round(model, 
     datasets, 
     partitions,
     args,
-    prev_loss=None):
+    prev_grad=None,
+    prev_losses=None,
+    prev_params=None):
     """
     Run one FL round
 
     Input
     - model: FL model
     - datasets: client TensorDatasets
+    - partitions: represent elements of each client
+    - args: from arg parser
 
     Output
     - select_clients: selected client
@@ -106,7 +103,6 @@ def run_round(model,
 
     lossf = nn.CrossEntropyLoss()
     device = get_device(args)
-    dataloaders = []
 
     params = {} # parameter for model
     with torch.no_grad():
@@ -115,7 +111,9 @@ def run_round(model,
             params[key].zero_()
 
     loss_list = []
+    param_list = []
     total_loss = 0.0
+    current_param = get_last_param(model)
 
     """
     for partition in partitions:
@@ -124,38 +122,37 @@ def run_round(model,
             shuffle=True, num_workers=args.num_workers, pin_memory=args.pin_memory)
         dataloaders.append(client_dataloader)
     """
-    if args.active_algorithm != 'Random':
-        #pbar = tqdm(dataloaders, desc='Local loss')
-        if prev_loss is None:
-            for partition in partitions:
-                datasubset = Subset(datasets, partition)
-                dataloader = DataLoader(datasubset, batch_size=args.batch_size, 
-                    shuffle=True, num_workers=args.num_workers, 
-                    pin_memory=args.pin_memory)
-                _, loss = test_epoch(model, dataloader, device)
+    if args.active_algorithm == 'LossSampling' and prev_losses is not None:
+        loss_array = np.exp(prev_losses)
+        total_loss = np.sum(loss_array)
+        loss_list = loss_array.tolist()  
+        pmf = list(map(lambda item: item/total_loss, loss_list))
+    elif args.active_algorithm == 'GradientBADGE' and prev_params is not None:
+        # Sampling by BADGE
+        similar_list = []
+        total_sim = 0.0
 
-                loss = np.exp(loss)
-                loss_list.append(loss)
-                total_loss += loss
-        else:
-            loss_array = np.exp(prev_loss)
-            total_loss = np.sum(loss_array)
-            loss_list = loss_array.tolist()
-                
-        pdf = list(map(lambda item: item/total_loss, loss_list))
+        for prev_param in prev_params:
+            similarity = get_similarity(args, prev_grad, prev_param)
+            total_sim += similarity
+            similar_list.append(similarity)
+
+        pmf = list(map(lambda item: item/total_sim, similar_list))
     else:
-        pdf = [1.0 / args.num_clients] * args.num_clients
+        # Select as random
+        pmf = random_pmf(args.num_clients)
 
+    print("pmf: ", pmf)
     # Sampling client
-    selected_clients = np.random.choice(args.num_clients, args.active_selection, replace=False, p=pdf)
-    #print("Selected clients: ", selected_clients)
+    selected_clients = np.random.choice(args.num_clients, args.active_selection, replace=False, p=pmf)
 
     train_size = 0
+
     for client_idx in selected_clients:
         client_size = len(partitions[client_idx])
         train_size += client_size
 
-    for client_idx in selected_clients:
+    for client_idx in range(args.num_clients):
         train_partition = partitions[client_idx]
         client_size = len(train_partition)
 
@@ -178,10 +175,15 @@ def run_round(model,
                 loss.backward()
                 optimizer.step()
 
+        if args.active_algorithm == 'GradientBADGE':
+            client_last_param = get_last_param(copy_model)
+            param_list.append(current_param - client_last_param)
+
         # FedAVG
-        with torch.no_grad():
-            for key, value in copy_model.named_parameters():
-                params[key] += (client_size / train_size) * value
+        if client_idx in selected_clients:
+            with torch.no_grad():
+                for key, value in copy_model.named_parameters():
+                    params[key] += (client_size / train_size) * value
     
     # apply value to global model
     with torch.no_grad():
@@ -201,4 +203,4 @@ def run_round(model,
 
     loss_array = np.array(loss_list)
 
-    return selected_clients, loss_array
+    return selected_clients, loss_array, param_list

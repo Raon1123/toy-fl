@@ -1,8 +1,10 @@
 data/
 __pycache__/
 runs/
+scripts/
 
 nohup.out
+test.py
 
 *.sh
 *.out
@@ -10,3 +12,4 @@ nohup.out
 
 logdir/
 save/
+outs/

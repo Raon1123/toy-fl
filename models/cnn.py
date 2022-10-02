@@ -18,7 +18,7 @@ class CNN(nn.Module):
         # FC
         self.fc1 = nn.Linear(16*5*5, 120)
         self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, num_classes)
+        self.fcs = nn.Linear(84, num_classes)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
@@ -27,7 +27,7 @@ class CNN(nn.Module):
         x = torch.flatten(x, 1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = self.fcs(x)
 
         return x
 
