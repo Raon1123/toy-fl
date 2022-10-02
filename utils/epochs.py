@@ -136,12 +136,12 @@ def run_round(model,
             total_sim += similarity
             similar_list.append(similarity)
 
-        print("similar: ", similar_list)
         pmf = list(map(lambda item: item/total_sim, similar_list))
     else:
         # Select as random
         pmf = random_pmf(args.num_clients)
 
+    print("pmf: ", pmf)
     # Sampling client
     selected_clients = np.random.choice(args.num_clients, args.active_selection, replace=False, p=pmf)
 
