@@ -19,20 +19,14 @@ def get_last_param(model):
             last_bias = copy.deepcopy(param).unsqueeze(1).detach().cpu()
 
     last_param = torch.cat([last_weight, last_bias], dim=1)
+    last_param = torch.flatten(last_param)
     return last_param
 
 
-def get_similarity(args, vec1, vec2):
-    assert vec1.shape == vec2.shape
-
-    vec1 = torch.flatten(vec1)
-    vec2 = torch.flatten(vec2)
-    vec2 = vec2 / torch.norm(vec2)
-
-    if args.similarity_measure == 'distance':
-        ret = (vec1 - vec2).pow(2).sum().sqrt().item()
-    elif args.similarity_measure == 'similar':
-        cos = nn.CosineSimilarity(dim=0)
-        ret = cos(vec1, vec2).abs().item()
+def get_pairdistance(vec1, vec2):
+    """
+    """
+    pdist = nn.PairwiseDistance(p=2)
+    ret = pdist(vec1, vec2)
 
     return ret

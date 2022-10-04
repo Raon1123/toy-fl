@@ -47,27 +47,18 @@ def main(args, writer):
     model = model.to(device)
 
     loss_array = None
-    param_list = None
-    prev_model = None
-    pseudograd = None
+    client_params = None
 
     # train phase
     pbar = tqdm(range(num_rounds), desc='FL round')
     for round in pbar:
-        if prev_model is not None:
-            prev_last = get_last_param(prev_model)
-            curr_last = get_last_param(model)
-            pseudograd = curr_last - prev_last
-        prev_model = copy.deepcopy(model)
-
         ret = run_round(model, 
             train_dataset, 
             partition, 
             args, 
-            prev_grad=pseudograd,
             prev_losses=loss_array, 
-            prev_params=param_list)
-        active_idx, loss_array, param_list = ret
+            prev_params=client_params)
+        active_idx, loss_array, client_params = ret
 
         train_loss = np.average(loss_array)
 

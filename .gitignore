@@ -9,6 +9,7 @@ test.py
 *.sh
 *.out
 *.lprof
+*.tar
 
 logdir/
 save/
