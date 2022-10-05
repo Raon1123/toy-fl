@@ -109,6 +109,8 @@ def argparser():
     parser.add_argument('--depth',type = int,default = 20, 
                         help = "The depth of ResNet. Only valid when model is resnet")
 
+    parser.add_argument('--seeds', nargs='+', type=int, default=[0])
+
     args = parser.parse_args()
     return args
 

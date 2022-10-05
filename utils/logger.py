@@ -5,7 +5,7 @@ from datetime import datetime
 import torch
 import numpy as np
 
-def exp_str(args):
+def exp_str(args, seed):
     now = datetime.now()
     now_str = now.strftime('%y%m%d-%H%M%S')
 
@@ -21,6 +21,8 @@ def exp_str(args):
 
     if args.postfix != '':
         join_list.append(args.postfix)
+
+    join_list.append(str(seed))
 
     ret = '_'.join(join_list)
     return ret

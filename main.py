@@ -17,12 +17,12 @@ from utils.epochs import test_epoch, train_epoch, run_round
 from utils.logger import log_bin, save_model, save_loss
 from utils.logger import exp_str, write_timestamp
 from utils.datasets import get_dataset
-from utils.toolkit import get_last_param
+from utils.toolkit import set_seed
 
 
-def main(args, writer):
+def main(args, writer, seed):
     device = get_device(args)
-    experiment = exp_str(args)
+    experiment = exp_str(args, seed)
 
     print("=" * 20)
     print("Experiment: ", experiment)
@@ -137,13 +137,19 @@ if __name__=='__main__':
     write_timestamp("Start")
     args = argparser()
 
-    experiment = exp_str(args)
-    log_PATH = os.path.join(args.logdir, experiment)
-    writer = SummaryWriter(log_dir=log_PATH)
+    seed_list = args.seeds
 
-    if not args.centralized:
-        main(args, writer)
-    write_timestamp("End FL")
+    for seed in seed_list:
+        print("seed", seed)
+        set_seed(seed)
+
+        experiment = exp_str(args, seed)
+        log_PATH = os.path.join(args.logdir, experiment)
+        writer = SummaryWriter(log_dir=log_PATH)
+
+        if not args.centralized:
+            main(args, writer, seed)
+        write_timestamp("End FL")
     
-    central_main(args, writer)
-    write_timestamp("End CL")
+    #central_main(args, writer)
+    #write_timestamp("End CL")
