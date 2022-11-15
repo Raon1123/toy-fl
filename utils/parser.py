@@ -35,6 +35,7 @@ def get_optimizer(model, args):
     assert optimizer is not None
     return optimizer
 
+
 def argparser():
     parser = argparse.ArgumentParser()
 

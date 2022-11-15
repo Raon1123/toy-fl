@@ -45,3 +45,12 @@ def get_pairdistance(vec1, vec2):
     ret = pdist(vec1, vec2)
 
     return ret
+
+
+def get_dataset_labels(dataset):
+    try:
+        labels = dataset.targets
+    except AttributeError:
+        labels = dataset.tensors[1]
+
+    return labels

@@ -17,12 +17,12 @@ def exp_str(args, seed):
     if args.label_distribution == 'Dirichlet':
         join_list.append(str(args.label_dirichlet))
 
-    join_list.append(now_str)
+    join_list.append(now_str) # timestamp
 
     if args.postfix != '':
         join_list.append(args.postfix)
 
-    join_list.append(str(seed))
+    join_list.append(str(seed)) # random seed
 
     ret = '_'.join(join_list)
     return ret

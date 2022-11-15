@@ -3,9 +3,15 @@ import pickle
 import argparse
 
 import numpy as np
+from scipy import io
+
+import torch
+from torch.utils.data import TensorDataset
 import torchvision
 import torchvision.transforms as transforms
 
+from utils.consts import *
+from utils.toolkit import get_dataset_labels
 #from utils.parser import argparser
 
 def get_partition(args, label_idx, num_classes, data_size):
@@ -98,17 +104,21 @@ def get_dataset(args):
     elif args.dataset == 'fmnist':
         num_classes = 10
         in_channel = 1
-        transform = transforms.Compose(
-            [transforms.ToTensor(),
+        transform = transforms.Compose([
+            transforms.ToTensor(),
             transforms.Normalize((0.5), (0.5))])
         train_dataset = torchvision.datasets.FashionMNIST(root='./data', train=True,
                                         download=True, transform=transform)
         test_dataset = torchvision.datasets.FashionMNIST(root='./data', train=False,
                                         download=True, transform=transform)
+    elif args.dataset == 'cifar10feature':
+        num_classes = 10
+        in_channel = 1
+        train_dataset, test_dataset = get_cifar10feature(args)
     else:
         raise Exception('Wrong dataset')
 
-    train_labels = train_dataset.targets
+    train_labels = get_dataset_labels(train_dataset)
     train_size = len(train_labels)
 
     label_idx = []
@@ -132,6 +142,29 @@ def get_dataset(args):
     return train_dataset, test_dataset, partition, num_classes, in_channel
 
 
+def get_cifar10feature(args):
+    data_dir = args.data_dir
+
+    # train dataset
+    trn_name = 'CIFAR10Trn.mat'
+    mat_path = os.path.join(data_dir, trn_name)
+    mat = io.loadmat(mat_path)
+    trnX = torch.Tensor(mat['Trn'][0][0][0])
+    trnY = torch.Tensor(mat['Trn'][0][0][1]).argmax(axis=1)
+
+    # test dataset
+    tst_name = 'CIFAR10Tst.mat'
+    mat_path = os.path.join(data_dir, tst_name)
+    mat = io.loadmat(mat_path)
+    tstX = torch.Tensor(mat['Tst'][0][0][0])
+    tstY = torch.Tensor(mat['Tst'][0][0][1]).argmax(axis=1)
+
+    train_dataset = TensorDataset(trnX, trnY)
+    test_dataset = TensorDataset(tstX, tstY)
+
+    return train_dataset, test_dataset
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -139,7 +172,7 @@ if __name__ == "__main__":
         help='root directory of data')
     parser.add_argument('--logdir', type=str, default='./logdir')
     parser.add_argument('--dataset', type=str, default='cifar10',
-        choices=['cifar10', 'cifar100', 'fmnist'],
+        choices=DATASET,
         help='experiment dataset')
 
     parser.add_argument('-C', '--num_clients', type=int, default=100)
