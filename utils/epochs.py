@@ -9,8 +9,9 @@ from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from utils.parser import get_device
-from utils.toolkit import get_last_param
+from utils.toolkit import get_last_param, get_local_dataloader
 from utils.acs import acs_random, acs_loss, acs_badge, acs_powd
+from utils.federated import fedavg
 
 
 def test_epoch(model, dataloader, device, use_pbar=False):
@@ -55,16 +56,11 @@ def test_epoch(model, dataloader, device, use_pbar=False):
     return acc, (running_loss / total)
 
 
-def train_epoch(model, optimizer, lossf, dataloader, args, device, use_pbar=False):
-    if use_pbar:
-        pbar = tqdm(dataloader, desc='Train epoch')
-    else:
-        pbar = dataloader
-
+def train_local_epoch(model, optimizer, lossf, dataloader, device='cpu'):
     total = 0
     running_loss = 0.0
 
-    for imgs, labels in pbar:
+    for imgs, labels in dataloader:
         
         imgs, labels = imgs.to(device), labels.to(device) 
 
@@ -78,7 +74,7 @@ def train_epoch(model, optimizer, lossf, dataloader, args, device, use_pbar=Fals
         total += labels.size(0)
         running_loss += loss.detach().cpu().item()
 
-    return (running_loss / total)
+    return model, (running_loss / total)
 
 
 def run_round(model, 
@@ -131,38 +127,34 @@ def run_round(model,
 
     train_size = np.sum(size_arr[np.array(selected_clients)])
 
-    for client_idx in range(args.num_clients):
-        train_partition = partitions[client_idx]
-        client_size = size_arr[client_idx]
+    if args.active_algorithm == 'GradientBADGE':
+        for client_idx in range(args.num_clients):
+            client_dataloader = get_local_dataloader(args, client_idx, partitions, datasets)
 
-        datasubset = Subset(datasets, train_partition)
-        client_dataloader = DataLoader(datasubset, batch_size=args.batch_size, 
-            shuffle=True, num_workers=args.num_workers, pin_memory=args.pin_memory)
+            copy_model = copy.deepcopy(model)
+            copy_model.to(device)
+            optimizer = optim.SGD(copy_model.parameters(), lr=args.lr, momentum=args.momentum)
 
-        copy_model = copy.deepcopy(model)
-        copy_model.to(device)
-        optimizer = optim.SGD(copy_model.parameters(), lr=args.lr, momentum=args.momentum)
+            copy_model, _ = train_local_epoch(copy_model, optimizer, lossf, client_dataloader, device)
 
-        for _ in range(args.local_epoch):
-            for data in client_dataloader:
-                X, y = data[0].to(device), data[1].to(device) 
-
-                optimizer.zero_grad()
-                outputs = copy_model(X)
-                loss = lossf(outputs, y)
-
-                loss.backward()
-                optimizer.step()
-
-        if args.active_algorithm == 'GradientBADGE':
             client_last_param = get_last_param(copy_model)
             param_list.append(current_param - client_last_param)
 
-        # FedAVG
-        if client_idx in selected_clients:
-            with torch.no_grad():
-                for key, value in copy_model.named_parameters():
-                    params[key] += (client_size / train_size) * value
+            if client_idx in selected_clients:
+                params = fedavg(params, copy_model, 
+                    client_size=size_arr[client_idx], train_size=train_size)
+    else:
+        for client_idx in selected_clients:
+            client_dataloader = get_local_dataloader(args, client_idx, partitions, datasets)
+
+            copy_model = copy.deepcopy(model)
+            copy_model.to(device)
+            optimizer = optim.SGD(copy_model.parameters(), lr=args.lr, momentum=args.momentum)
+
+            copy_model, _ = train_local_epoch(copy_model, optimizer, lossf, client_dataloader, device)
+
+            params = fedavg(params, copy_model, 
+                client_size=size_arr[client_idx], train_size=train_size)
     
     # apply value to global model
     with torch.no_grad():
