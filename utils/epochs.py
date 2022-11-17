@@ -127,9 +127,7 @@ def run_round(model,
     elif args.active_algorithm == 'powd' and prev_losses is not None:
         selected_clients = acs_powd(args, size_arr, prev_losses)
     else:
-        selected_clients = acs_random(args)
-
-    print(selected_clients)    
+        selected_clients = acs_random(args)  
 
     train_size = np.sum(size_arr[np.array(selected_clients)])
 

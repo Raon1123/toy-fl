@@ -62,7 +62,8 @@ def main(args, writer, seed):
 
         train_loss = np.average(loss_array)
 
-        print(active_idx)
+        if args.verbose:
+            print(active_idx)
         # bin count
         for idx in active_idx:
             active_client_bin[idx] = active_client_bin[idx] + 1
