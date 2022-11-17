@@ -61,7 +61,6 @@ def train_local_epoch(model, optimizer, lossf, dataloader, device='cpu'):
     running_loss = 0.0
 
     for imgs, labels in dataloader:
-        
         imgs, labels = imgs.to(device), labels.to(device) 
 
         optimizer.zero_grad()
@@ -165,7 +164,7 @@ def run_round(model,
     for partition in partitions:
         datasubset = Subset(datasets, partition)
         dataloader = DataLoader(datasubset, batch_size=args.batch_size, 
-            shuffle=True, num_workers=args.num_workers, 
+            shuffle=False, num_workers=args.num_workers, 
             pin_memory=args.pin_memory)
         _, loss = test_epoch(model, dataloader, device)
 
