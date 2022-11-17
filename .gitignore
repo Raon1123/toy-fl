@@ -2,6 +2,7 @@ data/
 __pycache__/
 runs/
 scripts/
+outs/
 
 nohup.out
 test.py
