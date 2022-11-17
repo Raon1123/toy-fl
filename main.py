@@ -17,12 +17,12 @@ from utils.epochs import test_epoch, train_epoch, run_round
 from utils.logger import log_bin, save_model, save_loss
 from utils.logger import exp_str, write_timestamp
 from utils.datasets import get_dataset
-from utils.toolkit import get_last_param
+from utils.toolkit import set_seed
 
 
-def main(args, writer):
+def main(args, writer, seed):
     device = get_device(args)
-    experiment = exp_str(args)
+    experiment = exp_str(args, seed)
 
     print("=" * 20)
     print("Experiment: ", experiment)
@@ -47,27 +47,18 @@ def main(args, writer):
     model = model.to(device)
 
     loss_array = None
-    param_list = None
-    prev_model = None
-    pseudograd = None
+    client_params = None
 
     # train phase
     pbar = tqdm(range(num_rounds), desc='FL round')
     for round in pbar:
-        if prev_model is not None:
-            prev_last = get_last_param(prev_model)
-            curr_last = get_last_param(model)
-            pseudograd = curr_last - prev_last
-        prev_model = copy.deepcopy(model)
-
         ret = run_round(model, 
             train_dataset, 
             partition, 
             args, 
-            prev_grad=pseudograd,
             prev_losses=loss_array, 
-            prev_params=param_list)
-        active_idx, loss_array, param_list = ret
+            prev_params=client_params)
+        active_idx, loss_array, client_params = ret
 
         train_loss = np.average(loss_array)
 
@@ -146,13 +137,19 @@ if __name__=='__main__':
     write_timestamp("Start")
     args = argparser()
 
-    experiment = exp_str(args)
-    log_PATH = os.path.join(args.logdir, experiment)
-    writer = SummaryWriter(log_dir=log_PATH)
+    seed_list = args.seeds
 
-    if not args.centralized:
-        main(args, writer)
-    write_timestamp("End FL")
+    for seed in seed_list:
+        print("seed", seed)
+        set_seed(seed)
+
+        experiment = exp_str(args, seed)
+        log_PATH = os.path.join(args.logdir, experiment)
+        writer = SummaryWriter(log_dir=log_PATH)
+
+        if not args.centralized:
+            main(args, writer, seed)
+        write_timestamp("End FL")
     
-    central_main(args, writer)
-    write_timestamp("End CL")
+    #central_main(args, writer)
+    #write_timestamp("End CL")

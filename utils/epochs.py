@@ -9,10 +9,10 @@ from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from utils.parser import get_device
-from utils.toolkit import random_pmf, get_last_param, get_similarity
+from utils.toolkit import get_last_param
+from utils.acs import acs_random, acs_loss, acs_badge, acs_powd
 
 
-#@profile
 def test_epoch(model, dataloader, device, use_pbar=False):
     """
     Run one test epoch
@@ -48,7 +48,7 @@ def test_epoch(model, dataloader, device, use_pbar=False):
             total += labels.size(0)
             correct += (pred == labels).sum().item()
 
-            running_loss += loss.item()
+            running_loss += loss.detach().cpu().item()
 
     acc = 100 * correct / total
 
@@ -64,27 +64,27 @@ def train_epoch(model, optimizer, lossf, dataloader, args, device, use_pbar=Fals
     total = 0
     running_loss = 0.0
 
-    for x, y in pbar:
-        total += y.size(0)
-        x, y = x.to(device), y.to(device)
+    for imgs, labels in pbar:
+        
+        imgs, labels = imgs.to(device), labels.to(device) 
 
         optimizer.zero_grad()
-        outputs = model(x)
-        loss = lossf(outputs, y)
+        outputs = model(imgs)
+        loss = lossf(outputs, labels)
 
         loss.backward()
         optimizer.step()
 
+        total += labels.size(0)
         running_loss += loss.detach().cpu().item()
 
     return (running_loss / total)
 
-#@profile
+
 def run_round(model, 
     datasets, 
     partitions,
     args,
-    prev_grad=None,
     prev_losses=None,
     prev_params=None):
     """
@@ -112,49 +112,30 @@ def run_round(model,
 
     loss_list = []
     param_list = []
-    total_loss = 0.0
     current_param = get_last_param(model)
 
-    """
-    for partition in partitions:
-        datasubset = Subset(datasets, partition)
-        client_dataloader = DataLoader(datasubset, batch_size=args.batch_size, 
-            shuffle=True, num_workers=args.num_workers, pin_memory=args.pin_memory)
-        dataloaders.append(client_dataloader)
-    """
-    if args.active_algorithm == 'LossSampling' and prev_losses is not None:
-        loss_array = np.exp(prev_losses)
-        total_loss = np.sum(loss_array)
-        loss_list = loss_array.tolist()  
-        pmf = list(map(lambda item: item/total_loss, loss_list))
-    elif args.active_algorithm == 'GradientBADGE' and prev_params is not None:
-        # Sampling by BADGE
-        similar_list = []
-        total_sim = 0.0
-
-        for prev_param in prev_params:
-            similarity = get_similarity(args, prev_grad, prev_param)
-            total_sim += similarity
-            similar_list.append(similarity)
-
-        pmf = list(map(lambda item: item/total_sim, similar_list))
-    else:
-        # Select as random
-        pmf = random_pmf(args.num_clients)
-
-    print("pmf: ", pmf)
-    # Sampling client
-    selected_clients = np.random.choice(args.num_clients, args.active_selection, replace=False, p=pmf)
-
-    train_size = 0
-
-    for client_idx in selected_clients:
+    # calculate size of each client
+    size_arr = np.zeros(args.num_clients)
+    for client_idx in range(args.num_clients):
         client_size = len(partitions[client_idx])
-        train_size += client_size
+        size_arr[client_idx] = client_size
+
+    if args.active_algorithm == 'LossSampling' and prev_losses is not None:
+        selected_clients = acs_loss(args, prev_losses)
+    elif args.active_algorithm == 'GradientBADGE' and prev_params is not None:
+        selected_clients = acs_badge(args, prev_params)
+    elif args.active_algorithm == 'powd' and prev_losses is not None:
+        selected_clients = acs_powd(args, size_arr, prev_losses)
+    else:
+        selected_clients = acs_random(args)
+
+    print(selected_clients)    
+
+    train_size = np.sum(size_arr[np.array(selected_clients)])
 
     for client_idx in range(args.num_clients):
         train_partition = partitions[client_idx]
-        client_size = len(train_partition)
+        client_size = size_arr[client_idx]
 
         datasubset = Subset(datasets, train_partition)
         client_dataloader = DataLoader(datasubset, batch_size=args.batch_size, 

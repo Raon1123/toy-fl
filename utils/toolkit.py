@@ -1,7 +1,22 @@
 import copy
+import random
+
+import numpy as np
 
 import torch
 import torch.nn as nn
+
+def set_seed(seed):
+    torch.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    np.random.seed(seed)
+    random.seed(seed)
+
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    
 
 def random_pmf(num_clients):
     pmf = [1.0 / num_clients] * num_clients
@@ -19,20 +34,23 @@ def get_last_param(model):
             last_bias = copy.deepcopy(param).unsqueeze(1).detach().cpu()
 
     last_param = torch.cat([last_weight, last_bias], dim=1)
+    last_param = torch.flatten(last_param)
     return last_param
 
 
-def get_similarity(args, vec1, vec2):
-    assert vec1.shape == vec2.shape
-
-    vec1 = torch.flatten(vec1)
-    vec2 = torch.flatten(vec2)
-    vec2 = vec2 / torch.norm(vec2)
-
-    if args.similarity_measure == 'distance':
-        ret = (vec1 - vec2).pow(2).sum().sqrt().item()
-    elif args.similarity_measure == 'similar':
-        cos = nn.CosineSimilarity(dim=0)
-        ret = cos(vec1, vec2).abs().item()
+def get_pairdistance(vec1, vec2):
+    """
+    """
+    pdist = nn.PairwiseDistance(p=2)
+    ret = pdist(vec1, vec2)
 
     return ret
+
+
+def get_dataset_labels(dataset):
+    try:
+        labels = dataset.targets
+    except AttributeError:
+        labels = dataset.tensors[1]
+
+    return labels
