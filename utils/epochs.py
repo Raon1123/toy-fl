@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from utils.parser import get_device
 from utils.toolkit import get_last_param
-from utils.acs import acs_random, acs_loss, acs_badge
+from utils.acs import acs_random, acs_loss, acs_badge, acs_powd
 
 
 def test_epoch(model, dataloader, device, use_pbar=False):
@@ -114,31 +114,28 @@ def run_round(model,
     param_list = []
     current_param = get_last_param(model)
 
-    """
-    for partition in partitions:
-        datasubset = Subset(datasets, partition)
-        client_dataloader = DataLoader(datasubset, batch_size=args.batch_size, 
-            shuffle=True, num_workers=args.num_workers, pin_memory=args.pin_memory)
-        dataloaders.append(client_dataloader)
-    """
+    # calculate size of each client
+    size_arr = np.zeros(args.num_clients)
+    for client_idx in range(args.num_clients):
+        client_size = len(partitions[client_idx])
+        size_arr[client_idx] = client_size
+
     if args.active_algorithm == 'LossSampling' and prev_losses is not None:
         selected_clients = acs_loss(args, prev_losses)
     elif args.active_algorithm == 'GradientBADGE' and prev_params is not None:
         selected_clients = acs_badge(args, prev_params)
+    elif args.active_algorithm == 'powd' and prev_losses is not None:
+        selected_clients = acs_powd(args, size_arr, prev_losses)
     else:
         selected_clients = acs_random(args)
 
     print(selected_clients)    
 
-    train_size = 0
-
-    for client_idx in selected_clients:
-        client_size = len(partitions[client_idx])
-        train_size += client_size
+    train_size = np.sum(size_arr[np.array(selected_clients)])
 
     for client_idx in range(args.num_clients):
         train_partition = partitions[client_idx]
-        client_size = len(train_partition)
+        client_size = size_arr[client_idx]
 
         datasubset = Subset(datasets, train_partition)
         client_dataloader = DataLoader(datasubset, batch_size=args.batch_size, 

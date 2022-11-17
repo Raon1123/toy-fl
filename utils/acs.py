@@ -40,10 +40,35 @@ def acs_loss(args, prev_losses):
     loss_list = loss_array.tolist()  
 
     pmf = list(map(lambda item: item/total_loss, loss_list))
+    print("pmf:", pmf)
 
     selected_clients = np.random.choice(args.num_clients, 
         args.active_selection, 
         replace=False, 
         p=pmf)
+
+    return selected_clients
+
+
+def acs_powd(args, size_array, prev_losses):
+    """
+    """
+    # random sample d clients from data size of each client
+    total_size = np.sum(size_array)
+    norm = lambda x: x / total_size
+    pmf = norm(size_array)
+    print("pmf:", pmf)
+
+    select_d_client = np.random.choice(args.num_clients,
+        args.powd,
+        replace=False,
+        p=pmf)
+
+    # estimate local loss from sampled client 
+    prev_d_loss = prev_losses[select_d_client]
+    sorted_d_loss = np.argsort(-prev_d_loss)
+
+    # select highest loss clients
+    selected_clients = sorted_d_loss[:args.active_selection]
 
     return selected_clients

@@ -56,16 +56,11 @@ def argparser():
 
     # FL settings
     parser.add_argument('-N', '--num_clients', type=int, default=100)
-    parser.add_argument('-R', '--num_rounds', type=int, default=2000)
+    parser.add_argument('-R', '--num_rounds', type=int, default=200)
     parser.add_argument('--model', type=str, default='CNN',
         choices=MODELS)
     parser.add_argument('--batch_size', type=int, default=32)
     
-    parser.add_argument('--client_distribution', type=str, default='uniform',
-        choices=['Dirichlet', 'IID'],
-        help='distribution of number of clients')
-    parser.add_argument('--client_dirichlet', type=float, default=10.)
-
     parser.add_argument('--label_distribution', type=str, default='uniform',
         choices=['Dirichlet', 'random', 'uniform'],
         help='distribution of labels in client')
@@ -73,10 +68,14 @@ def argparser():
         help='divide method')
 
     # active client selection settings
-    parser.add_argument('-C', '--active_selection', type=int, default=10)
+    parser.add_argument('-C', '--active_selection', type=int, default=5)
     parser.add_argument('--active_algorithm', type=str, default='Random',
         choices=ACTIVEALGORITHM,
         help='Active client selection strategy')
+
+    # pow-d
+    parser.add_argument('--powd', type=int, default=10,
+        help='d value of power-of-d method')
 
     # gradient based approach
     parser.add_argument('--similarity_measure', type=str, default='distance')
@@ -91,6 +90,7 @@ def argparser():
 
     parser.add_argument('--logdir', type=str, default='./logdir')
     parser.add_argument('--log_freq', type=int, default=1)
+    parser.add_argument('--verbose', action='store_true')
     
     parser.add_argument('--model_save', action='store_false')
     parser.add_argument('--save_path', type=str, default='./save')
