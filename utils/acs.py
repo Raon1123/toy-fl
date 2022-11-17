@@ -40,7 +40,9 @@ def acs_loss(args, prev_losses):
     loss_list = loss_array.tolist()  
 
     pmf = list(map(lambda item: item/total_loss, loss_list))
-    print("pmf:", pmf)
+    
+    if args.verbose:
+        print("pmf:", pmf)
 
     selected_clients = np.random.choice(args.num_clients, 
         args.active_selection, 
@@ -57,7 +59,9 @@ def acs_powd(args, size_array, prev_losses):
     total_size = np.sum(size_array)
     norm = lambda x: x / total_size
     pmf = norm(size_array)
-    print("pmf:", pmf)
+    
+    if args.verbose:
+        print("pmf:", pmf)
 
     select_d_client = np.random.choice(args.num_clients,
         args.powd,
