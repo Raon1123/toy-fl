@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 from models.modelutil import get_model
 from utils.parser import argparser, get_device
 from utils.epochs import test_epoch, run_round
-from utils.logger import log_bin, save_model, save_loss
+from utils.logger import save_bin, save_model, save_loss, save_acc
 from utils.logger import exp_str, write_timestamp
 from utils.datasets import get_dataset
 from utils.toolkit import set_seed
@@ -22,7 +22,7 @@ from utils.toolkit import set_seed
 
 def main(args, writer, seed):
     device = get_device(args)
-    experiment = exp_str(args, seed)
+    experiment = exp_str(args)
 
     print("=" * 20)
     print("Experiment: ", experiment)
@@ -30,13 +30,18 @@ def main(args, writer, seed):
     
     num_clients = args.num_clients
     num_rounds = args.num_rounds
+    acc_list = []
 
     os.makedirs(args.save_path, exist_ok=True)
+
     save_DIR = os.path.join(args.save_path, experiment)
     os.makedirs(save_DIR, exist_ok=True)
 
+    loss_DIR = os.path.join(save_DIR, 'loss_'+str(seed))
+    os.makedirs(loss_DIR, exist_ok=True)
+
     # datasets
-    train_dataset, test_dataset, partition, num_classes, in_channel = get_dataset(args) 
+    train_dataset, test_dataset, partition, num_classes, in_channel = get_dataset(args, seed) 
 
     test_loader = DataLoader(test_dataset, 
         batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
@@ -79,6 +84,7 @@ def main(args, writer, seed):
             'Train Loss': train_loss
         }
         pbar.set_postfix(desc)
+        acc_list.append(acc)
 
         # logging
         if (writer is not None) and ((communication_round + 1) % args.log_freq == 0):
@@ -86,13 +92,14 @@ def main(args, writer, seed):
             writer.add_scalar(prefix+'/Test Acc', acc, communication_round)
             writer.add_scalar(prefix+'/Test Loss', test_loss, communication_round)
             writer.add_scalar(prefix+'/Train Loss', train_loss, communication_round)
-            save_loss(loss_array, communication_round, save_DIR)
+            save_loss(loss_array, communication_round, loss_DIR)
 
     writer.flush()
 
-    log_bin(active_client_bin, partition, save_DIR)
+    save_bin(active_client_bin, partition, save_DIR, seed)
+    save_acc(acc_list, save_DIR, seed)
     if args.model_save:
-        save_model(model, save_DIR) 
+        save_model(model, save_DIR, seed) 
 
 
 if __name__=='__main__':
@@ -105,13 +112,12 @@ if __name__=='__main__':
         print("seed", seed)
         set_seed(seed)
 
-        experiment = exp_str(args, seed)
+        experiment = exp_str(args)
         log_PATH = os.path.join(args.logdir, experiment)
+        log_PATH = os.path.join(log_PATH, str(seed))
         writer = SummaryWriter(log_dir=log_PATH)
 
         if not args.centralized:
             main(args, writer, seed)
         write_timestamp("End FL")
     
-    #central_main(args, writer)
-    #write_timestamp("End CL")

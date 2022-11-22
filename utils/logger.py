@@ -4,11 +4,15 @@ from datetime import datetime
 
 import torch
 import numpy as np
+import pickle
 
-def exp_str(args, seed):
+def write_timestamp(prefix=""):
     now = datetime.now()
     now_str = now.strftime('%y%m%d-%H%M%S')
+    print(prefix, now_str)
 
+
+def exp_str(args):
     join_list = [args.model,
         args.active_algorithm]
 
@@ -17,20 +21,15 @@ def exp_str(args, seed):
     if args.label_distribution == 'Dirichlet':
         join_list.append(str(args.label_dirichlet))
 
-    join_list.append(now_str) # timestamp
-
     if args.postfix != '':
         join_list.append(args.postfix)
-
-    join_list.append(str(seed)) # random seed
 
     ret = '_'.join(join_list)
     return ret
 
 
-def log_bin(bins, partition, bin_DIR):
-    os.makedirs(bin_DIR, exist_ok=True)
-    bin_PATH = os.path.join(bin_DIR, 'bin.csv')
+def save_bin(bins, partition, bin_DIR, seed):
+    bin_PATH = os.path.join(bin_DIR, 'bin_'+str(seed)+'.csv')
 
     bin_file = open(bin_PATH, "w")
     bin_writer = csv.writer(bin_file)
@@ -42,21 +41,23 @@ def log_bin(bins, partition, bin_DIR):
     bin_file.close()
 
 
-def write_timestamp(prefix=""):
-    now = datetime.now()
-    now_str = now.strftime('%y%m%d-%H%M%S')
-    print(prefix, now_str)
-
-
-def save_model(model, model_DIR):
-    save_PATH = os.path.join(model_DIR, 'save.pt')
+def save_model(model, model_DIR, seed):
+    save_PATH = os.path.join(model_DIR, 'save'+str(seed)+'.pt')
     torch.save(model.state_dict(), save_PATH)
 
 
 def save_loss(loss_array, round, save_DIR):
     if type(round) is not str:
         round = str(round)
+    if type(seed) is not str:
+        seed = str(seed)
 
     loss_PATH = os.path.join(save_DIR, 'loss_' + round + '.npy')
 
     np.save(loss_PATH, loss_array)
+
+
+def save_acc(acc_list, save_DIR, seed):
+    acc_PATH = os.path.join(save_DIR, 'acc'+str(seed)+'.pkl')
+    with open(acc_PATH, 'wb') as f:
+        pickle.dump(acc_list, f)

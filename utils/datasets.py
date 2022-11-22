@@ -85,7 +85,7 @@ def get_partition(args, label_idx, num_classes, data_size):
     return partition
 
 
-def get_dataset(args):
+def get_dataset(args, seed):
     """
     Output
     - train_dataset: (train_data, train_labels)
@@ -134,7 +134,7 @@ def get_dataset(args):
         idx = np.where(np.array(train_labels) == label)[0]
         label_idx.append(idx)
 
-    join_list = [args.dataset, args.label_distribution, str(args.num_clients), "partiton.pickle"]
+    join_list = [args.dataset, args.label_distribution, str(args.num_clients), str(seed), "partiton.pickle"]
     partition_file = '_'.join(join_list)
     partition_PATH = os.path.join(args.logdir, partition_file)
     if os.path.exists(partition_PATH):
