@@ -14,7 +14,7 @@ from utils.acs import acs_random, acs_loss, acs_badge, acs_powd
 from utils.federated import fedavg
 
 
-def test_epoch(model, dataloader, device, use_pbar=False):
+def test_epoch(model, dataloader, device):
     """
     Run one test epoch
 
@@ -28,11 +28,6 @@ def test_epoch(model, dataloader, device, use_pbar=False):
     - acc: accuracy
     - total_loss: total sum of loss
     """
-    if use_pbar:
-        pbar = tqdm(dataloader, desc='Test epoch')
-    else:
-        pbar = dataloader
-
     model.eval()
 
     total, correct = 0, 0
@@ -40,7 +35,7 @@ def test_epoch(model, dataloader, device, use_pbar=False):
     lossf = nn.CrossEntropyLoss()
 
     with torch.no_grad():
-        for imgs, labels in pbar:
+        for imgs, labels in dataloader:
             imgs, labels = imgs.to(device), labels.to(device) 
 
             outputs = model(imgs)
@@ -56,9 +51,10 @@ def test_epoch(model, dataloader, device, use_pbar=False):
     return acc, (running_loss / total)
 
 
-def train_local_epoch(model, optimizer, lossf, dataloader, device='cpu'):
+def train_local_epoch(model, optimizer, dataloader, device='cpu'):
     total = 0
     running_loss = 0.0
+    lossf = nn.CrossEntropyLoss()
 
     for imgs, labels in dataloader:
         imgs, labels = imgs.to(device), labels.to(device) 
@@ -95,8 +91,6 @@ def run_round(model,
     - select_clients: selected client
     - train_loss: total training loss
     """
-
-    lossf = nn.CrossEntropyLoss()
     device = get_device(args)
 
     params = {} # parameter for model
@@ -134,7 +128,7 @@ def run_round(model,
             copy_model.to(device)
             optimizer = optim.SGD(copy_model.parameters(), lr=args.lr, momentum=args.momentum)
 
-            copy_model, _ = train_local_epoch(copy_model, optimizer, lossf, client_dataloader, device)
+            copy_model, _ = train_local_epoch(copy_model, optimizer, client_dataloader, device)
 
             client_last_param = get_last_param(copy_model)
             param_list.append(current_param - client_last_param)
@@ -150,7 +144,7 @@ def run_round(model,
             copy_model.to(device)
             optimizer = optim.SGD(copy_model.parameters(), lr=args.lr, momentum=args.momentum)
 
-            copy_model, _ = train_local_epoch(copy_model, optimizer, lossf, client_dataloader, device)
+            copy_model, _ = train_local_epoch(copy_model, optimizer, client_dataloader, device)
 
             params = fedavg(params, copy_model, 
                 client_size=size_arr[client_idx], train_size=train_size)
@@ -160,6 +154,7 @@ def run_round(model,
         for key, value in model.named_parameters():
             value.copy_(params[key])
 
+    # evaluate each client loss
     loss_list = []
     for partition in partitions:
         datasubset = Subset(datasets, partition)

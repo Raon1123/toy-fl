@@ -49,8 +49,6 @@ def save_model(model, model_DIR, seed):
 def save_loss(loss_array, round, save_DIR):
     if type(round) is not str:
         round = str(round)
-    if type(seed) is not str:
-        seed = str(seed)
 
     loss_PATH = os.path.join(save_DIR, 'loss_' + round + '.npy')
 

@@ -43,6 +43,9 @@ def main(args, writer, seed):
     # datasets
     train_dataset, test_dataset, partition, num_classes, in_channel = get_dataset(args, seed) 
 
+    partition_weight = np.array([len(l) for l in partition]) 
+    partition_weight = partition_weight / np.sum(partition_weight) # normalzie
+
     test_loader = DataLoader(test_dataset, 
         batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     active_client_bin = [0] * num_clients
@@ -69,7 +72,7 @@ def main(args, writer, seed):
             print("Round ", communication_round)
             print("Selected client", active_idx)
             print("Loss array", loss_array)
-        train_loss = np.average(loss_array)
+        train_loss = np.sum(loss_array * partition_weight)
             
         # bin count
         for idx in active_idx:
