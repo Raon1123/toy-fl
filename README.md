@@ -5,7 +5,6 @@
 - pytorch, torchvision
 - tqdm
 - tensorboard
-- [line_profiler](https://anaconda.org/conda-forge/line_profiler)
 
 # Implementation detail
 
@@ -17,6 +16,12 @@
 ```bash
 python3 main.py
 ```
+
+```
+sbatch --nodelist=unistml8 fmnist.sh 
+```
+
+in detail refer `sample.sh`
 
 ## Argument
 

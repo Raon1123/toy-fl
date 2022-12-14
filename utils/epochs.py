@@ -30,7 +30,7 @@ def test_epoch(model, dataloader, device):
     """
     model.eval()
 
-    total, correct = 0, 0
+    correct = 0
     running_loss = 0.0
     lossf = nn.CrossEntropyLoss()
 
@@ -41,18 +41,16 @@ def test_epoch(model, dataloader, device):
             outputs = model(imgs)
             loss = lossf(outputs, labels)
             _, pred = torch.max(outputs.data, 1)
-            total += labels.size(0)
             correct += (pred == labels).sum().item()
 
-            running_loss += loss.detach().cpu().item()
+            running_loss += loss.detach().cpu().item() * labels.size(0)
 
-    acc = 100 * correct / total
+    acc = 100 * correct / len(dataloader.dataset)
 
-    return acc, (running_loss / total)
+    return acc, running_loss / len(dataloader.dataset)
 
 
 def train_local_epoch(model, optimizer, dataloader, device='cpu'):
-    total = 0
     running_loss = 0.0
     lossf = nn.CrossEntropyLoss()
 
@@ -66,10 +64,9 @@ def train_local_epoch(model, optimizer, dataloader, device='cpu'):
         loss.backward()
         optimizer.step()
 
-        total += labels.size(0)
-        running_loss += loss.detach().cpu().item()
+        running_loss += loss.detach().cpu().item() * labels.size(0)
 
-    return model, (running_loss / total)
+    return model, running_loss / len(dataloader.dataset)
 
 
 def run_round(model, 
@@ -163,7 +160,6 @@ def run_round(model,
             pin_memory=args.pin_memory)
         _, loss = test_epoch(model, dataloader, device)
 
-        loss = np.exp(loss)
         loss_list.append(loss)
 
     loss_array = np.array(loss_list)

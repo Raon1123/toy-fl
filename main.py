@@ -9,36 +9,23 @@ from torch.utils.data import DataLoader
 
 from tqdm import tqdm
 
-from torch.utils.tensorboard import SummaryWriter
-
 from models.modelutil import get_model
 from utils.parser import argparser, get_device
 from utils.epochs import test_epoch, run_round
-from utils.logger import save_bin, save_model, save_loss, save_acc
-from utils.logger import exp_str, write_timestamp
+import utils.logger as logger
 from utils.datasets import get_dataset
 from utils.toolkit import set_seed
 
 
 def main(args, writer, seed):
     device = get_device(args)
-    experiment = exp_str(args)
-
-    print("=" * 20)
-    print("Experiment: ", experiment)
-    print("=" * 20)
+    
+    logger.print_experiment(args)
+    save_DIR, loss_DIR = logger.get_save_dir(args, seed)
     
     num_clients = args.num_clients
     num_rounds = args.num_rounds
     acc_list = []
-
-    os.makedirs(args.save_path, exist_ok=True)
-
-    save_DIR = os.path.join(args.save_path, experiment)
-    os.makedirs(save_DIR, exist_ok=True)
-
-    loss_DIR = os.path.join(save_DIR, 'loss_'+str(seed))
-    os.makedirs(loss_DIR, exist_ok=True)
 
     # datasets
     train_dataset, test_dataset, partition, num_classes, in_channel = get_dataset(args, seed) 
@@ -47,7 +34,10 @@ def main(args, writer, seed):
     partition_weight = partition_weight / np.sum(partition_weight) # normalzie
 
     test_loader = DataLoader(test_dataset, 
-        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+        batch_size=args.batch_size, 
+        shuffle=False, 
+        num_workers=args.num_workers)
+
     active_client_bin = [0] * num_clients
 
     model = get_model(args, num_classes, in_channel)
@@ -95,18 +85,18 @@ def main(args, writer, seed):
             writer.add_scalar(prefix+'/Test Acc', acc, communication_round)
             writer.add_scalar(prefix+'/Test Loss', test_loss, communication_round)
             writer.add_scalar(prefix+'/Train Loss', train_loss, communication_round)
-            save_loss(loss_array, communication_round, loss_DIR)
+            logger.save_loss(loss_array, communication_round, loss_DIR)
 
     writer.flush()
 
-    save_bin(active_client_bin, partition, save_DIR, seed)
-    save_acc(acc_list, save_DIR, seed)
+    logger.save_bin(active_client_bin, partition, save_DIR, seed)
+    logger.save_acc(acc_list, save_DIR, seed)
     if args.model_save:
-        save_model(model, save_DIR, seed) 
+        logger.save_model(model, save_DIR, seed) 
 
 
 if __name__=='__main__':
-    write_timestamp("Start")
+    logger.write_timestamp("Start")
     args = argparser()
 
     seed_list = args.seeds
@@ -115,12 +105,9 @@ if __name__=='__main__':
         print("seed", seed)
         set_seed(seed)
 
-        experiment = exp_str(args)
-        log_PATH = os.path.join(args.logdir, experiment)
-        log_PATH = os.path.join(log_PATH, str(seed))
-        writer = SummaryWriter(log_dir=log_PATH)
+        writer = logger.get_writer(args, seed)
 
         if not args.centralized:
             main(args, writer, seed)
-        write_timestamp("End FL")
+        logger.write_timestamp("End FL")
     

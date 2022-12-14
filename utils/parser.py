@@ -31,6 +31,8 @@ def get_optimizer(model, args):
 
     if args.optimizer == 'SGD':
         optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+    else:
+        raise NotImplementedError
 
     assert optimizer is not None
     return optimizer
@@ -105,7 +107,7 @@ def argparser():
                         help="number of filters in each convolutional layer.")
     parser.add_argument('--padding', action='store_true', 
                         help='use padding in each convolutional layer')
-    parser.add_argument('--mlp_layers',type= int,default=[64,],nargs="*",
+    parser.add_argument('--mlp_layers',type= int,default=[64,],nargs="+",
                         help="numbers of dimensions of each hidden layer in MLP, or fc layers in CNN")
     parser.add_argument('--depth',type = int,default = 20, 
                         help = "The depth of ResNet. Only valid when model is resnet")

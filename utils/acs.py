@@ -76,3 +76,12 @@ def acs_powd(args, size_array, prev_losses):
     selected_clients = sorted_d_loss[:args.active_selection]
 
     return selected_clients
+
+
+def acs_topk(args, prev_losses):
+    """
+    """
+    sorted_loss = np.argsort(-prev_losses)
+    selected_clients = sorted_loss[:args.active_selection]
+
+    return selected_clients

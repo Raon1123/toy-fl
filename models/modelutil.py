@@ -11,7 +11,7 @@ def get_model(args, num_classes, in_channel):
     elif args.model == 'NaiveCNN':
         model = NaiveCNN(args=args, input_shape = [3, 32, 32], num_classes=num_classes, final_pool=False)
     elif args.model == 'MLP':
-        model = MLP(hidden_layers=[2048, 200, 200, 200])
+        model = MLP(hidden_layers=args.mlp_layers)
     else:
         Exception('Wrong model definition') 
 
