@@ -134,11 +134,15 @@ def get_dataset(args, seed):
         idx = np.where(np.array(train_labels) == label)[0]
         label_idx.append(idx)
 
-    join_list = [args.dataset, args.label_distribution, str(args.num_clients), str(seed), "partiton.pickle"]
+    dist_str = args.label_distribution
+    if dist_str == 'Dirichlet':
+        dist_str = dist_str + str(args.label_dirichlet)
+
+    join_list = [args.dataset, dist_str, str(args.num_clients), str(seed), "partiton.pickle"]
     partition_file = '_'.join(join_list)
     partition_PATH = os.path.join(args.logdir, partition_file)
     if os.path.exists(partition_PATH):
-        print("Load partition")
+        print("Load partition ", partition_PATH)
         with open(partition_PATH, "rb") as fr:
             partition = pickle.load(fr)
     else:
