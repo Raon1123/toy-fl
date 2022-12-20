@@ -125,7 +125,9 @@ def run_round(model,
             copy_model.to(device)
             optimizer = optim.SGD(copy_model.parameters(), lr=args.lr, momentum=args.momentum)
 
-            copy_model, _ = train_local_epoch(copy_model, optimizer, client_dataloader, device)
+
+            for _ in range(args.local_epoch):
+                copy_model, _ = train_local_epoch(copy_model, optimizer, client_dataloader, device)
 
             client_last_param = get_last_param(copy_model)
             param_list.append(current_param - client_last_param)
@@ -141,7 +143,8 @@ def run_round(model,
             copy_model.to(device)
             optimizer = optim.SGD(copy_model.parameters(), lr=args.lr, momentum=args.momentum)
 
-            copy_model, _ = train_local_epoch(copy_model, optimizer, client_dataloader, device)
+            for _ in range(args.local_epoch):
+                copy_model, _ = train_local_epoch(copy_model, optimizer, client_dataloader, device)
 
             params = fedavg(params, copy_model, 
                 client_size=size_arr[client_idx], train_size=train_size)
