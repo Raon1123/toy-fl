@@ -88,6 +88,8 @@ def run_round(model,
     - select_clients: selected client
     - train_loss: total training loss
     """
+    SEARCH_EVERY_METHOD = ['GradientBADGE']
+
     device = get_device(args)
 
     params = {} # parameter for model
@@ -112,19 +114,23 @@ def run_round(model,
         selected_clients = acs_badge(args, prev_params)
     elif args.active_algorithm == 'powd' and prev_losses is not None:
         selected_clients = acs_powd(args, size_arr, prev_losses)
+    elif args.active_algorithm == 'FedCor':
+        assert NotImplementedError
+        # gpr_test_offpolicy at FedCor author's code
+        # selected_clients = acs_fedcor(args, size_arr, prev_losses)
+
     else:
         selected_clients = acs_random(args)  
 
     train_size = np.sum(size_arr[np.array(selected_clients)])
 
-    if args.active_algorithm == 'GradientBADGE':
+    if args.active_algorithm in SEARCH_EVERY_METHOD:
         for client_idx in range(args.num_clients):
             client_dataloader = get_local_dataloader(args, client_idx, partitions, datasets)
 
             copy_model = copy.deepcopy(model)
             copy_model.to(device)
             optimizer = optim.SGD(copy_model.parameters(), lr=args.lr, momentum=args.momentum)
-
 
             for _ in range(args.local_epoch):
                 copy_model, _ = train_local_epoch(copy_model, optimizer, client_dataloader, device)
@@ -166,5 +172,56 @@ def run_round(model,
         loss_list.append(loss)
 
     loss_array = np.array(loss_list)
+
+    # calculate the advantage in off-policy
+
+    # test prediction accuracy of GP model
+
+    # train and exploit GPR
+
+    """
+    # calculate the advantage in off-policy
+    if gpr_idxs_users is not None and not args.gpr_selection:
+        rand_loss_decrease.append(np.sum((np.array(gt_global_losses[-1])-np.array(gt_global_losses[-2]))*weights))
+        rand_acc_improve.append(train_accuracy[-1]-train_accuracy[-2])
+        print("Advantage:",gpr_loss_decrease[-1]-rand_loss_decrease[-1])
+    
+    # test prediction accuracy of GP model
+    if args.gpr and epoch>args.warmup:
+        test_idx = np.random.choice(range(args.num_users), m, replace=False)
+        test_data = np.concatenate([np.expand_dims(list(range(args.num_users)),1),
+                                    np.expand_dims(np.array(gt_global_losses[-1])-np.array(gt_global_losses[-2]),1),
+                                    np.ones([args.num_users,1])],1)
+        pred_idx = np.delete(list(range(args.num_users)),test_idx)
+        
+        predict_loss,mu_p,sigma_p = gpr.Predict_Loss(test_data,test_idx,pred_idx)
+        print("GPR Predict relative Loss:{:.4f}".format(predict_loss))
+        predict_losses.append(predict_loss)
+
+    # train and exploit GPR
+    if args.gpr:
+        if epoch<=args.warmup and epoch>=args.gpr_begin:# warm-up
+            gpr_warmup(args, epoch, gpr, gt_global_losses, gpr_data)
+        elif epoch>args.warmup and epoch%args.GPR_interval==0:# normal and optimization round
+            gpr_optimal(args, epoch, gpr, m, global_model, train_dataset, user_groups, gt_global_losses, gpr_data) 
+        else:# normal and not optimization round
+            gpr.update_loss(np.concatenate([np.expand_dims(idxs_users,1),
+                                        np.expand_dims(epoch_global_losses,1)],1))
+            gpr.update_discount(idxs_users,args.discount)
+            
+        if epoch>=args.warmup:
+            gpr_idxs_users = gpr.Select_Clients(m,args.loss_power,args.epsilon_greedy,args.discount_method,weights,args.dynamic_C,args.dynamic_TH)
+            print("GPR Chosen Clients:",gpr_idxs_users)
+        
+        if args.mvnt and (epoch==args.warmup or (epoch%args.mvnt_interval==0 and epoch>args.warmup)):
+            mvn_file = file_name+'/MVN/{}'.format(seed)
+            if not os.path.exists(mvn_file):
+                os.makedirs(mvn_file)
+            mvn_samples=MVN_Test(args,copy.deepcopy(global_model),
+                                        train_dataset,user_groups,
+                                        file_name+'/MVN/{}/{}.csv'.format(seed,epoch))
+            sigma_gt.append(np.cov(mvn_samples,rowvar=False,bias = True))
+            sigma.append(gpr.Covariance().clone().detach().numpy())
+    """
 
     return selected_clients, loss_array, param_list

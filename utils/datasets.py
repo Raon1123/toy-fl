@@ -41,10 +41,6 @@ def get_partition(args, label_idx, num_classes, data_size):
         label_dist = label_dist.T # (num_clients, num_classes)
     elif args.label_distribution == 'uniform':
         label_dist = np.full((num_clients, num_classes), 1.0 / num_clients)
-    elif args.label_distribution == 'random':
-        candidate_data_index = []
-        for labels in label_idx:
-            candidate_data_index = candidate_data_index + labels  
     else:
         raise Exception('Wrong divide method') 
 
@@ -55,28 +51,34 @@ def get_partition(args, label_idx, num_classes, data_size):
         sample_idx = []
         distribution = client_dist[client_id,:] # (num_classes,)
 
-        if args.label_distribution == 'random':
-            sample_idx = np.random.choice(candidate_data_index, np.sum(distribution))
-            for idx in sample_idx:
-                candidate_data_index.remove(idx)
-        else:
-            for label in range(num_classes):
-                sample_size = min(distribution[label], len(label_idx[label]))
-                if len(label_idx[label]) == 0:
-                    continue
-                sample = np.random.choice(label_idx[label], sample_size, replace=False)
-                label_idx[label] = np.setdiff1d(label_idx[label], sample)
-                sample_idx += sample.tolist()
+        for label in range(num_classes):
+            sample_size = min(distribution[label], len(label_idx[label]))
+            if len(label_idx[label]) == 0:
+                continue
+            sample = np.random.choice(label_idx[label], sample_size, replace=False)
+            label_idx[label] = np.setdiff1d(label_idx[label], sample)
+            sample_idx += sample.tolist()
 
+        if len(sample_idx) == 0:
+            continue
         partition.append(sample_idx)
 
     # for remain part
     # randomly add
-    for label in range(num_classes):
-        remain = label_idx[label]
-        for idx in remain:
-            client_idx = np.random.choice(num_clients, 1).item()
-            partition[client_idx].append(idx)
+    if len(partition) == num_clients:
+        for label in range(num_classes):
+            remain = label_idx[label]
+            for idx in remain:
+                client_idx = np.random.choice(num_clients, 1).item()
+                partition[client_idx].append(idx)
+    else:
+        extra_partition = [[] for _ in range(num_clients-len(partition))]
+        for label in range(num_classes):
+            remain = label_idx[label]
+            for idx in remain:
+                client_idx = np.random.choice(num_clients-len(partition), 1).item()
+                extra_partition[client_idx].append(idx)
+        partition += extra_partition
 
     partition = [np.array(l) for l in partition]
 
