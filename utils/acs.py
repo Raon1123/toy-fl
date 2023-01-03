@@ -94,54 +94,11 @@ def acs_fedcor(args, mu, sigma, alpha):
     - sigma (matrix): X.T X
     - alpha (float): scale factor
     """
+    # In FedCor paper implementation, they always use with "gpr_selection = True" option
+
     selected_clients = []
     candidate_clients = list(range(args.num_clients))
 
-    """
-    # accuracy and loss of every client
-    gpr_acc, gpr_loss = train_federated_learning(args,epoch,
-                        copy.deepcopy(global_model),gpr_idxs_users,train_dataset,user_groups) 
-    # 0: index 1: values 2: noisy
-    gpr_loss_data = np.concatenate([np.expand_dims(list(range(args.num_users)),1),
-                                    np.expand_dims(np.array(gpr_loss)-np.array(gt_global_losses[-1]),1),
-                                    np.ones([args.num_users,1])],1)
-
-    predict_loss,_,_=gpr.Predict_Loss(gpr_loss_data,gpr_idxs_users,np.delete(list(range(args.num_users)),gpr_idxs_users))
-
-        mu_p, sigma_p = self.Posteriori(data[priori_idx,:])
-            data = torch.tensor(data).to(self.noise)
-            indexes = data[:,0].long()
-            values = data[:,1]
-            noisy = data[:,2]
-            Cov = self.Covariance()
-            
-            Sigma_inv = torch.inverse(Cov[indexes,:][:,indexes]+torch.diag(noisy).to(self.noise)*(self.noise**2))
-            mu = self.mu.to(self.noise)+((Cov[:,indexes].mm(Sigma_inv)).mm((values-self.mu[indexes].to(self.noise)).unsqueeze(1))).squeeze()
-            Sigma = Cov
-            return mu.detach(), Sigma.detach()
-        noise_scale = 0.1
-        while True:
-            try:
-                pdist = MultivariateNormal(loc = mu_p[posteriori_idx],
-                                           covariance_matrix = sigma_p[posteriori_idx,:][:,posteriori_idx]+noise_scale*torch.eye(len(posteriori_idx)))
-                break
-            except ValueError:
-                print(sigma_p.shape)
-                noise_scale*=10
-                if noise_scale > 100:
-                    raise Exception("Cannot satisfy positive definiteness property")
-        predict_loss = -pdist.log_prob(torch.tensor(data[posteriori_idx,1]).to(mu_p))
-        predict_loss = predict_loss.detach().item()
-        return predict_loss,mu_p,sigma_p
-    
-    print("GPR Predict Off-Policy Loss:{:.4f}".format(predict_loss))
-    
-    offpolicy_losses.append(predict_loss)
-
-    gpr_dloss = np.sum((np.array(gpr_loss)-np.array(gt_global_losses[-1]))*weights)
-    gpr_loss_decrease.append(gpr_dloss)
-    gpr_acc_improve.append(gpr_acc-train_accuracy[-1])
-    """
 
     for _ in range(args.active_selection):
         # compute the score for each candidate client
@@ -161,3 +118,7 @@ def acs_fedcor(args, mu, sigma, alpha):
         sigma = sigma - alpha * np.dot(sigma[selected], sigma)
 
     return selected_clients
+
+
+def acs_fedcor_warmup():
+    pass

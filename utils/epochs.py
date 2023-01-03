@@ -116,7 +116,7 @@ def run_round(model,
         selected_clients = acs_powd(args, size_arr, prev_losses)
     elif args.active_algorithm == 'FedCor':
         assert NotImplementedError
-        # gpr_test_offpolicy at FedCor author's code
+
         # selected_clients = acs_fedcor(args, size_arr, prev_losses)
 
     else:
@@ -140,7 +140,8 @@ def run_round(model,
 
             if client_idx in selected_clients:
                 params = fedavg(params, copy_model, 
-                    client_size=size_arr[client_idx], train_size=train_size)
+                    client_size=size_arr[client_idx], 
+                    train_size=train_size)
     else:
         for client_idx in selected_clients:
             client_dataloader = get_local_dataloader(args, client_idx, partitions, datasets)
@@ -153,7 +154,8 @@ def run_round(model,
                 copy_model, _ = train_local_epoch(copy_model, optimizer, client_dataloader, device)
 
             params = fedavg(params, copy_model, 
-                client_size=size_arr[client_idx], train_size=train_size)
+                client_size=size_arr[client_idx], 
+                train_size=train_size)
     
     # apply value to global model
     with torch.no_grad():
@@ -164,9 +166,12 @@ def run_round(model,
     loss_list = []
     for partition in partitions:
         datasubset = Subset(datasets, partition)
-        dataloader = DataLoader(datasubset, batch_size=args.batch_size, 
-            shuffle=False, num_workers=args.num_workers, 
+        dataloader = DataLoader(datasubset, 
+            batch_size=args.batch_size, 
+            shuffle=False, 
+            num_workers=args.num_workers, 
             pin_memory=args.pin_memory)
+
         _, loss = test_epoch(model, dataloader, device)
 
         loss_list.append(loss)
@@ -180,12 +185,6 @@ def run_round(model,
     # train and exploit GPR
 
     """
-    # calculate the advantage in off-policy
-    if gpr_idxs_users is not None and not args.gpr_selection:
-        rand_loss_decrease.append(np.sum((np.array(gt_global_losses[-1])-np.array(gt_global_losses[-2]))*weights))
-        rand_acc_improve.append(train_accuracy[-1]-train_accuracy[-2])
-        print("Advantage:",gpr_loss_decrease[-1]-rand_loss_decrease[-1])
-    
     # test prediction accuracy of GP model
     if args.gpr and epoch>args.warmup:
         test_idx = np.random.choice(range(args.num_users), m, replace=False)
@@ -212,16 +211,6 @@ def run_round(model,
         if epoch>=args.warmup:
             gpr_idxs_users = gpr.Select_Clients(m,args.loss_power,args.epsilon_greedy,args.discount_method,weights,args.dynamic_C,args.dynamic_TH)
             print("GPR Chosen Clients:",gpr_idxs_users)
-        
-        if args.mvnt and (epoch==args.warmup or (epoch%args.mvnt_interval==0 and epoch>args.warmup)):
-            mvn_file = file_name+'/MVN/{}'.format(seed)
-            if not os.path.exists(mvn_file):
-                os.makedirs(mvn_file)
-            mvn_samples=MVN_Test(args,copy.deepcopy(global_model),
-                                        train_dataset,user_groups,
-                                        file_name+'/MVN/{}/{}.csv'.format(seed,epoch))
-            sigma_gt.append(np.cov(mvn_samples,rowvar=False,bias = True))
-            sigma.append(gpr.Covariance().clone().detach().numpy())
     """
 
     return selected_clients, loss_array, param_list
