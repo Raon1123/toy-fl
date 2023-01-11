@@ -33,9 +33,6 @@ class GPR(nn.Module):
         self.loss_stat = torch.ones(num_users).detach()
         self.discount = torch.ones(num_users).detach()
 
-    def Posteriori(self, data):
-        pass
-
     def predict_loss(self, data, priori_idx, posteriori_idx):
         mu, sigma = self.Posteriori(data[priori_idx,:])
         noise = 0.1
@@ -53,11 +50,8 @@ class GPR(nn.Module):
         proxy_loss = proxy_loss.detach().item()
         return proxy_loss, mu,sigma
 
-    def select_clients(self):
-        pass
-
-    def update_loss(self):
-        pass
+    def update_loss(self, index, value):
+        self.loss_stat[index] = value
 
     def update_discount(self, index, gamma=0.9):
         self.discount[index] *= gamma
@@ -65,64 +59,80 @@ class GPR(nn.Module):
     def get_losstype(self):
         return self.loss_type
 
-    def get_posteriori(self):
-        data = torch.tensor(data).to(self.noise)
-        indexes = data[:,0].long()
-        values = data[:,1]
-        noisy = data[:,2]
-        Cov = self.Covariance()
+    def get_noise(self, noisy):
+        return torch.diag(noisy).to(self.noise)*(self.noise**2)
 
-        sigma_inv = torch.inverse(Cov[indexes,:][:,indexes]+torch.diag(noisy).to(self.noise)*(self.noise**2))
-        mu = self.mu.to(self.noise)+((Cov[:,indexes] @ (sigma_inv)) @ ((values-self.mu[indexes].to(self.noise)).unsqueeze(1))).squeeze()
-        Sigma = Cov
-        return mu.detach(), Sigma.detach()
+    def get_posteriori(self, index, value, noisy=None):
+        index = index.long().to(self.noise)
+        value = value.to(self.noise)
+        if noisy is None:
+            noisy = torch.ones(len(index)).to(self.noise)
+        else:
+            noisy = noisy.to(self.noise)
+        covariance = self.Covariance()
 
-    def Reset_Discount(self):
+        sigma_inv = torch.inverse(covariance[index,:][:,index]+self.get_noise(noisy))
+        mu = self.mu.to(self.noise)+((covariance[:,index]@(sigma_inv))@((value-self.mu[index].to(self.noise)).unsqueeze(1))).squeeze()
+        sigma = covariance
+
+        return mu.detach(), sigma.detach()
+
+    def reset_discount(self):
         self.discount = torch.ones(self.num_users).detach()
 
-    """
-    def Log_Marginal_Likelihood(self, data):
+    def get_logmarginallikelihood(self, index, value, noisy=None):
         #Calculate the log marginal likelihood of the given data
         #data: given in the form [index,loss,noisy = {0,1}]
         #return log(p(loss|mu,sigma,relation,sigma_n))
         
-        data = torch.tensor(data).to(self.noise)
-        indexes = data[:,0].long()
-        values = data[:,1]
-        noisy = data[:,2]
-        mu = self.mu[indexes].to(self.noise)
-        Sigma = self.Covariance(indexes)+torch.diag(noisy).to(self.noise)*(self.noise**2)
+        index = index.long().to(self.noise)
+        value = value.to(self.noise)
+        if noisy is None:
+            noisy = torch.ones(len(index)).to(self.noise)
+        else:
+            noisy = noisy.to(self.noise)
+
+        mu = self.mu[index].to(self.noise)
+        Sigma = self.Covariance(index)+self.get_noise(noisy)
         distribution = MultivariateNormal(loc = mu,covariance_matrix = Sigma)
-        res = distribution.log_prob(values)
+        ret = distribution.log_prob(value)
 
-        return res
+        return ret
 
-    def Select_Clients(self,number=10,loss_power = 0.5,epsilon = 0.0,discount_method = 'loss',weights = None,Dynamic=False,Dynamic_TH=0.0,verbose = False):
-        def max_loss_decrease_client(client_group,Sigma,power = 0.3,discount_method = 'loss',weights = None):
-            # print(mu)
+    def select_clients(self,
+        number=10,
+        loss_power=0.5,
+        epsilon=0.0,
+        discount_method='loss',
+        weights=None,
+        Dynamic=False,
+        Dynamic_TH=0.0):
+
+        def max_loss_decrease_client(client_group,
+            Sigma,
+            power,
+            discount_method,
+            weights):
+            #Calculate the loss decrease of each client in the client group
             Sigma_valid = Sigma[:,client_group]
             Diag_valid = 1.0/(torch.diagonal(Sigma[:,client_group][client_group,:])+self.noise**2)
-            # Diag_valid = Diag_valid*(self.loss_decrease_estimation[client_group].to(self.noise)-mu[client_group])
             Diag_valid = -Diag_valid*torch.sqrt(torch.diagonal(Sigma[:,client_group][client_group,:]))
             if discount_method=='loss':
                 Diag_valid = Diag_valid*torch.pow(self.loss_stat[client_group],power)
             elif discount_method=='time':
                 Diag_valid = Diag_valid*self.discount[client_group]
 
-            # loss_decrease = Sigma_valid*Diag_valid
             if weights is None:
                 total_loss_decrease = torch.sum(Sigma_valid,dim=0)*Diag_valid
             else:
                 total_loss_decrease = torch.sum(torch.tensor(weights).reshape([self.num_users,1])*Sigma_valid,dim=0)*Diag_valid
-            # total_loss_decrease = torch.sum(loss_decrease,dim = 0)# Add across row
+
             mld,idx = torch.min(total_loss_decrease,0)
             idx = idx.item()
             selected_idx = client_group[idx]
             p_Sigma = Sigma-Sigma[:,selected_idx:selected_idx+1].mm(Sigma[selected_idx:selected_idx+1,:])/(Sigma[selected_idx,selected_idx]+self.noise**2)
-            d_mu = Sigma_valid[:,idx]*Diag_valid[idx]
-            # return selected_idx,mu+loss_decrease[:,idx],p_Sigma
-            return selected_idx,p_Sigma,mld.item(),d_mu.detach()
 
+            return selected_idx, p_Sigma, mld.item()
 
         # mu = self.mu
         prob = np.random.rand(1)[0]
@@ -134,12 +144,13 @@ class GPR(nn.Module):
             remain_clients = list(range(self.num_users))
             selected_clients = []
             for i in range(number):
-                idx,Sigma,total_loss_decrease,loss_decrease = max_loss_decrease_client(remain_clients,Sigma,loss_power,discount_method,weights)
+                idx, Sigma, total_loss_decrease = max_loss_decrease_client(remain_clients,Sigma,loss_power,discount_method,weights)
                 if Dynamic and -total_loss_decrease<Dynamic_TH:
                     break
                 selected_clients.append(idx)
                 remain_clients.remove(idx)
-    """
+
+            return selected_clients
 
 
 class PolyKernel(nn.Module):
@@ -261,10 +272,12 @@ def TrainGPR(gpr,
         MML:maximize log marginal likelihood
         LOO:maximize Leave-One-Out cross-validation predictive probability 
     """
-    if method is not None:
-        gpr.loss_type = method
-    method = gpr.get_losstype()
-    matrix_params,sigma_params = gpr.Parameter_Groups()
+    #if method is not None:
+    #    gpr.loss_type = method
+    #method = gpr.get_losstype()
+
+    matrix_params, sigma_params = gpr.Parameters()
+
     optimizer = torch.optim.Adam([{'params':matrix_params,'lr':lr},
                                   {'params':sigma_params,'lr':llr}], lr=lr,weight_decay=0.0)
     if schedule_lr:
@@ -274,6 +287,8 @@ def TrainGPR(gpr,
         gpr.zero_grad()
         loss = 0.0
         for group in range(len(data)):
+            loss = loss*gamma - gpr.get_logmarginallikelihood(data[group])
+            """
             if method == 'LOO':
                 loss = loss*gamma - gpr.Log_LOO_Predictive_Probability(data[group])
             elif method == 'MML': # this is default
@@ -282,12 +297,16 @@ def TrainGPR(gpr,
                 loss = loss*gamma + gpr.Log_NonNoise_Predictive_Error(data[group])
             else:
                 raise RuntimeError("Not supported training method!!")
-
+            """
         loss.backward()
         optimizer.step()
         if epoch%10==0 and verbose:
-            print("Train_Epoch:{}\t|Noise:{:.4f}\t|Sigma:{:.4f}\t|Loss:{:.4f}".format(epoch,gpr.noise.detach().item(),torch.mean(torch.diagonal(gpr.Covariance())).detach().item(),loss.item()))
-            #print(loss)
+            desc = "Train_Epoch:{}\t|Noise:{:.4f}\t|Sigma:{:.4f}\t|Loss:{:.4f}".format(
+                epoch,
+                gpr.noise.detach().item(),
+                torch.mean(torch.diagonal(gpr.Covariance())).detach().item(),
+                loss.item())
+            print(desc)
         if schedule_lr:
             lr_scd.step()
             
