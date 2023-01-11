@@ -9,7 +9,10 @@ def get_model(args, num_classes, in_channel):
     elif args.model == 'ResNet18':
         model = resnet18(num_classes=num_classes)
     elif args.model == 'NaiveCNN':
-        model = NaiveCNN(args=args, input_shape = [3, 32, 32], num_classes=num_classes, final_pool=False)
+        model = NaiveCNN(args=args, 
+            input_shape = [3, 32, 32], 
+            num_classes=num_classes, 
+            final_pool=False)
     elif args.model == 'MLP':
         model = MLP(hidden_layers=args.mlp_layers)
     else:
