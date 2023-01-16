@@ -33,25 +33,34 @@ class GPR(nn.Module):
         self.loss_stat = torch.ones(num_users).detach()
         self.discount = torch.ones(num_users).detach()
 
-    def predict_loss(self, data, priori_idx, posteriori_idx):
-        mu, sigma = self.Posteriori(data[priori_idx,:])
+        self.device = self.noise.device
+
+    def predict_loss(self, index, value, priori_idx, posteriori_idx, noisy=None):
+        index = torch.Tensor(index)
+        value = torch.Tensor(value)
+
+        mu, sigma = self.get_posteriori(index[priori_idx], value[priori_idx])
         noise = 0.1
+        
         while True:
             try:
                 cov_matrix = sigma[posteriori_idx,:][:,posteriori_idx] + noise*torch.eye(len(posteriori_idx))
-                pdist = MultivariateNormal(loc=mu[posteriori_idx], 
+                pdist = MultivariateNormal(
+                    loc=mu[posteriori_idx], 
                     covariance_matrix=cov_matrix)
                 break
             except ValueError:
                 noise *= 10
                 if noise > 100:
                     raise Exception("Cannot satisfy positive definiteness property")
-        proxy_loss = -pdist.log_prob(torch.tensor(data[posteriori_idx,1]).to(mu_p))
+        
+        proxy_loss = -1 * pdist.log_prob(value[posteriori_idx])
         proxy_loss = proxy_loss.detach().item()
+        
         return proxy_loss, mu,sigma
 
     def update_loss(self, index, value):
-        self.loss_stat[index] = value
+        self.loss_stat[index] = torch.tensor(value).to(self.device)
 
     def update_discount(self, index, gamma=0.9):
         self.discount[index] *= gamma
@@ -60,19 +69,19 @@ class GPR(nn.Module):
         return self.loss_type
 
     def get_noise(self, noisy):
-        return torch.diag(noisy).to(self.noise)*(self.noise**2)
+        return torch.diag(noisy).to(self.device)*(self.noise**2)
 
     def get_posteriori(self, index, value, noisy=None):
-        index = index.long().to(self.noise)
-        value = value.to(self.noise)
+        index = index.to(self.device).long()
+        value = value.to(self.device)
         if noisy is None:
-            noisy = torch.ones(len(index)).to(self.noise)
+            noisy = torch.ones(len(index)).to(self.device)
         else:
-            noisy = noisy.to(self.noise)
+            noisy = noisy.to(self.device)
         covariance = self.Covariance()
 
         sigma_inv = torch.inverse(covariance[index,:][:,index]+self.get_noise(noisy))
-        mu = self.mu.to(self.noise)+((covariance[:,index]@(sigma_inv))@((value-self.mu[index].to(self.noise)).unsqueeze(1))).squeeze()
+        mu = self.mu.to(self.device)+((covariance[:,index]@(sigma_inv))@((value-self.mu[index].to(self.device)).unsqueeze(1))).squeeze()
         sigma = covariance
 
         return mu.detach(), sigma.detach()
@@ -85,14 +94,14 @@ class GPR(nn.Module):
         #data: given in the form [index,loss,noisy = {0,1}]
         #return log(p(loss|mu,sigma,relation,sigma_n))
         
-        index = index.long().to(self.noise)
-        value = value.to(self.noise)
+        index = index.to(self.device).long()
+        value = value.to(self.device)
         if noisy is None:
-            noisy = torch.ones(len(index)).to(self.noise)
+            noisy = torch.ones(len(index)).to(self.device)
         else:
-            noisy = noisy.to(self.noise)
+            noisy = noisy.to(self.device)
 
-        mu = self.mu[index].to(self.noise)
+        mu = self.mu[index].to(self.device)
         Sigma = self.Covariance(index)+self.get_noise(noisy)
         distribution = MultivariateNormal(loc = mu,covariance_matrix = Sigma)
         ret = distribution.log_prob(value)
@@ -143,7 +152,7 @@ class GPR(nn.Module):
             Sigma = self.Covariance()
             remain_clients = list(range(self.num_users))
             selected_clients = []
-            for i in range(number):
+            for _ in range(number):
                 idx, Sigma, total_loss_decrease = max_loss_decrease_client(remain_clients,Sigma,loss_power,discount_method,weights)
                 if Dynamic and -total_loss_decrease<Dynamic_TH:
                     break
@@ -177,15 +186,6 @@ class PolyKernel(nn.Module):
         else:
             return torch.pow(k, self.order)
 
-"""
-gpr = Kernel_GPR(args.num_users,
-                 dimension = args.dimension,
-                 init_noise=0.01,
-                 order = 1, 
-                 Normalize = args.poly_norm,
-                 kernel=GPR.Poly_Kernel,
-                 loss_type= args.train_method)
-"""
 
 class Kernel_GPR(GPR):
     """
@@ -218,7 +218,7 @@ class Kernel_GPR(GPR):
                 num_users,
                 dimension = 10):
                 super(IndexProjection, self).__init__()
-                self.PMatrix = Parameter(torch.randn(dimension, num_users)/torch.sqrt(dimension))
+                self.PMatrix = Parameter(torch.randn(dimension, num_users)/np.sqrt(dimension))
 
             def forward(self, index):
                 return self.PMatrix[:, index]
@@ -244,8 +244,8 @@ class Kernel_GPR(GPR):
         
     def Covariance(self, idx=None):
         if idx is None:
-            ids = list(range(self.num_users))
-        xs = self.Projection(ids)
+            idx = list(range(self.num_users))
+        xs = self.Projection(idx)
         return self.Kernel(xs)
 
     def Parameters(self):
@@ -257,13 +257,13 @@ class Kernel_GPR(GPR):
 def TrainGPR(gpr,
     data,
     method = None,
-    lr = 1e-4,
-    llr = 1e-4,
-    gamma = 0.9,
-    max_epoches = 100, 
-    schedule_lr = False, 
-    schedule_t = None, 
-    schedule_gamma = 0.1,
+    matrix_lr=1e-4,
+    sigma_lr=1e-4,
+    gamma=0.9,
+    max_epoches=100, 
+    schedule_lr=False, 
+    schedule_t=None, 
+    schedule_gamma=0.1,
     verbose=True):
     """
     Train hyperparameters(Covariance,noise) of GPR
@@ -278,8 +278,8 @@ def TrainGPR(gpr,
 
     matrix_params, sigma_params = gpr.Parameters()
 
-    optimizer = torch.optim.Adam([{'params':matrix_params,'lr':lr},
-                                  {'params':sigma_params,'lr':llr}], lr=lr,weight_decay=0.0)
+    optimizer = torch.optim.Adam([{'params':matrix_params,'lr':matrix_lr},
+                                  {'params':sigma_params,'lr':sigma_lr}], lr=matrix_lr, weight_decay=0.0)
     if schedule_lr:
         lr_scd = torch.optim.lr_scheduler.MultiStepLR(optimizer,schedule_t,gamma = schedule_gamma)
 
@@ -287,7 +287,9 @@ def TrainGPR(gpr,
         gpr.zero_grad()
         loss = 0.0
         for group in range(len(data)):
-            loss = loss*gamma - gpr.get_logmarginallikelihood(data[group])
+            indexs = torch.Tensor(data[group][:,0])
+            values = torch.Tensor(data[group][:,1])
+            loss = loss*gamma - gpr.get_logmarginallikelihood(indexs, values)
             """
             if method == 'LOO':
                 loss = loss*gamma - gpr.Log_LOO_Predictive_Probability(data[group])
@@ -300,6 +302,7 @@ def TrainGPR(gpr,
             """
         loss.backward()
         optimizer.step()
+
         if epoch%10==0 and verbose:
             desc = "Train_Epoch:{}\t|Noise:{:.4f}\t|Sigma:{:.4f}\t|Loss:{:.4f}".format(
                 epoch,

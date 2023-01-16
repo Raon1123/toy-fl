@@ -57,6 +57,17 @@ def get_pairdistance(vec1, vec2):
     return ret
 
 
+def get_partition_weight(partitions):
+    """
+    get ratio of each partition
+    """
+    partition_weight = [len(partitions[i]) for i in range(len(partitions))]
+    partition_weight = np.array(partition_weight)
+    partition_weight = partition_weight / np.sum(partition_weight)
+
+    return partition_weight
+
+
 def get_dataset_labels(dataset):
     try:
         labels = dataset.targets

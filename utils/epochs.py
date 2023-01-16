@@ -6,11 +6,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Subset
-from tqdm import tqdm
 
 from utils.parser import get_device
-from utils.toolkit import get_last_param, get_local_dataloader
-from utils.acs import acs_random, acs_loss, acs_badge, acs_powd
+from utils.toolkit import get_last_param, get_local_dataloader, get_partition_weight
+from utils.acs import (
+    acs_random, acs_loss, acs_badge, acs_powd, 
+    gpr_warmup, gpr_optimal)
 from utils.federated import fedavg
 
 
@@ -69,12 +70,16 @@ def train_local_epoch(model, optimizer, dataloader, device='cpu'):
     return model, running_loss / len(dataloader.dataset)
 
 
-def run_round(model, 
+def run_round(
+    communication_round,
+    model, 
     datasets, 
     partitions,
     args,
     prev_losses=None,
-    prev_params=None):
+    prev_params=None,
+    gpr=None,
+    gpr_data=None):
     """
     Run one FL round
 
@@ -83,6 +88,9 @@ def run_round(model,
     - datasets: client TensorDatasets
     - partitions: represent elements of each client
     - args: from arg parser
+    - prev_losses: losses from previous round
+    - prev_params: parameters from previous round
+    - gpr: GP model for FedCor
 
     Output
     - select_clients: selected client
@@ -101,6 +109,7 @@ def run_round(model,
     loss_list = []
     param_list = []
     current_param = get_last_param(model)
+    weights = get_partition_weight(partitions)
 
     # calculate size of each client
     size_arr = np.zeros(args.num_clients)
@@ -114,11 +123,9 @@ def run_round(model,
         selected_clients = acs_badge(args, prev_params)
     elif args.active_algorithm == 'powd' and prev_losses is not None:
         selected_clients = acs_powd(args, size_arr, prev_losses)
-    elif args.active_algorithm == 'FedCor':
-        assert NotImplementedError
-
+    #elif args.active_algorithm == 'FedCor':
+        #assert NotImplementedError
         # selected_clients = acs_fedcor(args, size_arr, prev_losses)
-
     else:
         selected_clients = acs_random(args)  
 
@@ -162,7 +169,7 @@ def run_round(model,
         for key, value in model.named_parameters():
             value.copy_(params[key])
 
-    # evaluate each client loss
+    # evaluate each client loss at current rounds
     loss_list = []
     for partition in partitions:
         datasubset = Subset(datasets, partition)
@@ -177,40 +184,57 @@ def run_round(model,
         loss_list.append(loss)
 
     loss_array = np.array(loss_list)
-
-    # calculate the advantage in off-policy
+    loss_diff = loss_array - np.array(prev_losses) if prev_losses is not None else loss_array
 
     # test prediction accuracy of GP model
-
-    # train and exploit GPR
-
-    """
-    # test prediction accuracy of GP model
-    if args.gpr and epoch>args.warmup:
-        test_idx = np.random.choice(range(args.num_users), m, replace=False)
-        test_data = np.concatenate([np.expand_dims(list(range(args.num_users)),1),
-                                    np.expand_dims(np.array(gt_global_losses[-1])-np.array(gt_global_losses[-2]),1),
-                                    np.ones([args.num_users,1])],1)
-        pred_idx = np.delete(list(range(args.num_users)),test_idx)
+    if (args.active_algorithm == 'FedCor') and communication_round>args.warmup:
+        test_idx = np.random.choice(range(args.num_clients), args.active_selection, replace=False)
+        pred_idx = np.delete(list(range(args.num_clients)),test_idx)
         
-        predict_loss,mu_p,sigma_p = gpr.Predict_Loss(test_data,test_idx,pred_idx)
+        predict_loss, _, _ = gpr.predict_loss(
+            index=np.arange(args.num_clients),
+            value=loss_diff,
+            priori_idx=test_idx,
+            posteriori_idx=pred_idx)
+
         print("GPR Predict relative Loss:{:.4f}".format(predict_loss))
-        predict_losses.append(predict_loss)
 
     # train and exploit GPR
-    if args.gpr:
-        if epoch<=args.warmup and epoch>=args.gpr_begin:# warm-up
-            gpr_warmup(args, epoch, gpr, gt_global_losses, gpr_data)
-        elif epoch>args.warmup and epoch%args.GPR_interval==0:# normal and optimization round
-            gpr_optimal(args, epoch, gpr, m, global_model, train_dataset, user_groups, gt_global_losses, gpr_data) 
+    if args.active_algorithm == 'FedCor':
+        if communication_round<=args.warmup and communication_round>=args.gpr_begin:# warm-up
+            gpr_warmup(
+                args, 
+                communication_round, 
+                gpr, 
+                prev_losses,
+                loss_array,
+                gpr_data)
+
+        elif communication_round>args.warmup and communication_round%args.GPR_interval==0:# normal and optimization round
+            gpr_optimal(args, 
+                gpr, 
+                args.active_selection, 
+                model, 
+                datasets, 
+                partitions, 
+                loss_array, 
+                gpr_data,
+                device) 
+
         else:# normal and not optimization round
-            gpr.update_loss(np.concatenate([np.expand_dims(idxs_users,1),
-                                        np.expand_dims(epoch_global_losses,1)],1))
-            gpr.update_discount(idxs_users,args.discount)
+            gpr.update_loss(selected_clients, loss_array[selected_clients])
+            gpr.update_discount(selected_clients, 0.9)
             
-        if epoch>=args.warmup:
-            gpr_idxs_users = gpr.Select_Clients(m,args.loss_power,args.epsilon_greedy,args.discount_method,weights,args.dynamic_C,args.dynamic_TH)
+        if communication_round>=args.warmup:
+            gpr_idxs_users = gpr.select_clients(
+                args.active_selection, 
+                0.3,
+                0.0,
+                'time',
+                weights # partition size
+                )
+                
             print("GPR Chosen Clients:",gpr_idxs_users)
-    """
+    
 
     return selected_clients, loss_array, param_list

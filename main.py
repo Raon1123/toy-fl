@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 
 from tqdm import tqdm
 
+import models.gp as gp
 from models.modelutil import get_model
 from utils.parser import argparser, get_device
 from utils.epochs import test_epoch, run_round
@@ -46,16 +47,30 @@ def main(args, writer, seed):
 
     loss_array = None
     client_params = None
+    gpr = None
+    gpr_data = []
+
+    if args.active_algorithm == 'FedCor':
+        gpr = gp.Kernel_GPR(args.num_clients,
+                 dimension=15,
+                 init_noise=0.01,
+                 order=1, 
+                 kernel=gp.PolyKernel,
+                 loss_type='MML')
 
     # train phase
     pbar = tqdm(range(num_rounds), desc='FL round')
     for communication_round in pbar:
-        ret = run_round(model, 
+        ret = run_round(
+            communication_round,
+            model, 
             train_dataset, 
             partition, 
             args, 
             prev_losses=loss_array, 
-            prev_params=client_params)
+            prev_params=client_params,
+            gpr=gpr,
+            gpr_data=gpr_data)
         active_idx, loss_array, client_params = ret
 
         if args.verbose:
