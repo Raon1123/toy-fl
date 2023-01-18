@@ -174,7 +174,6 @@ def gpr_optimal(args,
         copy_model.to(device)
         optimizer = optim.SGD(copy_model.parameters(), lr=args.lr, momentum=args.momentum)
 
-        running_loss = 0.0
         lossf = nn.CrossEntropyLoss()
         for _ in range(args.local_epoch):
             for imgs, labels in client_dataloader:
@@ -187,9 +186,24 @@ def gpr_optimal(args,
                 loss.backward()
                 optimizer.step()
 
-                running_loss += loss.detach().cpu().item() * labels.size(0)
+    model.eval()
+    for client_idx in range(args.num_clients):
+        correct = 0
+        running_loss = 0.0
+        lossf = nn.CrossEntropyLoss()
+        client_dataloader = tk.get_local_dataloader(args, client_idx, partitions, datasets)
 
-        loss_list.append(loss)
+        with torch.no_grad():
+            for imgs, labels in client_dataloader:
+                imgs, labels = imgs.to(device), labels.to(device) 
+
+                outputs = model(imgs)
+                loss = lossf(outputs, labels)
+                _, pred = torch.max(outputs.data, 1)
+                correct += (pred == labels).sum().item()
+
+                running_loss += loss.detach().cpu().item() * labels.size(0)
+        loss_list.append(running_loss/len(partitions[client_idx]))
 
     epoch_gpr_data = np.concatenate([np.expand_dims(list(range(args.num_clients)),1),
                                     np.expand_dims(np.array(loss_list)-current_loss,1),
@@ -198,7 +212,6 @@ def gpr_optimal(args,
     print("Training GPR")
     gp.TrainGPR(gpr,
             gpr_data[-math.ceil(args.group_size/args.GPR_interval):],
-            args.train_method,
             matrix_lr=1e-2,
             sigma_lr=0.0,
             gamma=args.GPR_gamma**args.GPR_interval,

@@ -28,7 +28,7 @@ class GPR(nn.Module):
         self.loss_type = loss_type
         self.init_noise = init_noise
 
-        self.noise = Parameter(torch.tensor(init_noise))
+        self.noise = Parameter(torch.Tensor([init_noise]))
         self.mu = torch.zeros(num_users).detach()
         self.loss_stat = torch.ones(num_users).detach()
         self.discount = torch.ones(num_users).detach()
@@ -54,13 +54,13 @@ class GPR(nn.Module):
                 if noise > 100:
                     raise Exception("Cannot satisfy positive definiteness property")
         
-        proxy_loss = -1 * pdist.log_prob(value[posteriori_idx])
+        proxy_loss = -pdist.log_prob(value[posteriori_idx])
         proxy_loss = proxy_loss.detach().item()
         
-        return proxy_loss, mu,sigma
+        return proxy_loss, mu, sigma
 
     def update_loss(self, index, value):
-        self.loss_stat[index] = torch.tensor(value).to(self.device)
+        self.loss_stat[index] = torch.Tensor(value).to(self.device)
 
     def update_discount(self, index, gamma=0.9):
         self.discount[index] *= gamma
@@ -104,6 +104,7 @@ class GPR(nn.Module):
         mu = self.mu[index].to(self.device)
         Sigma = self.Covariance(index)+self.get_noise(noisy)
         distribution = MultivariateNormal(loc = mu,covariance_matrix = Sigma)
+        
         ret = distribution.log_prob(value)
 
         return ret
@@ -134,7 +135,7 @@ class GPR(nn.Module):
             if weights is None:
                 total_loss_decrease = torch.sum(Sigma_valid,dim=0)*Diag_valid
             else:
-                total_loss_decrease = torch.sum(torch.tensor(weights).reshape([self.num_users,1])*Sigma_valid,dim=0)*Diag_valid
+                total_loss_decrease = torch.sum(torch.Tensor(weights).reshape([self.num_users,1])*Sigma_valid,dim=0)*Diag_valid
 
             mld,idx = torch.min(total_loss_decrease,0)
             idx = idx.item()
@@ -172,7 +173,7 @@ class PolyKernel(nn.Module):
         self.normal = normal
 
         # variance parameter
-        self.sigma_f = Parameter(torch.tensor(1.0))
+        self.sigma_f = Parameter(torch.Tensor([1.0]))
 
     def forward(self, xs):
         k = xs.transpose(0,1) @ xs
