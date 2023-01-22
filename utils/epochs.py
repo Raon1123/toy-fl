@@ -223,7 +223,7 @@ def run_round(
 
         else:# normal and not optimization round
             gpr.update_loss(selected_clients, loss_array[selected_clients])
-            gpr.update_discount(selected_clients, 0.9)
+            gpr.update_discount(selected_clients, args.fedcor_beta)
             
         if communication_round>=args.warmup:
             gpr_idxs_users = gpr.select_clients(

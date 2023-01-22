@@ -1,10 +1,14 @@
-data="--data_dir ./data --dataset cifar10 --verbose"
+dataset=cifar10
+data="--data_dir /home/ayp/datasets --dataset ${dataset} --verbose"
 model="--model NaiveCNN "
-training="--num_rounds 500 --num_workers 4 --lr 5e-3 --momentum 0.0 --local_epoch 3"
+training="--num_rounds 2000 --num_workers 0 --lr 0.01 --momentum 0.9 --local_epoch 1"
 client="-N 100 -C 5 --label_distribution Dirichlet --label_dirichlet 0.3"
-seeds="--seeds 0 1"
-consts="${data} ${model} ${training} ${client} ${seeds}"
+seeds="--seeds 0 1 2 3 4 5 6 7 8 9"
+postf="dir03"
 
-python main.py --postfix test --device 0 \
-    ${consts} --active_algorithm FedCor \
-    1> outs/fmnist_test.out 2> outs/fmnist_test.err &
+expstr="${dataset}/FedCor_${postf}"
+
+python main.py --postfix ${postf} --device 0 \
+        ${data} ${model} ${training} ${client} ${seeds} \
+        --active_algorithm FedCor \
+        1> outs/${expstr}.out 2> outs/${expstr}.err &
