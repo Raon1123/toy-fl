@@ -5,6 +5,7 @@
 - pytorch, torchvision
 - tqdm
 - tensorboard
+- scipy
 
 # Implementation detail
 
