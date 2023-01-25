@@ -82,16 +82,18 @@ def argparser():
     # FedCor
     parser.add_argument('--warmup',type = int, default=15,
                         help = 'length of warm up phase for GP')
-    parser.add_argument('--gpr_begin',type = int,default=10,
+    parser.add_argument('--gpr_begin', type = int,default=10,
                         help='the round begin to sample and train GP')
-    parser.add_argument('--GPR_interval',type = int, default=10, 
-                        help = 'interval of sampling and training of GP, namely, Delta t')
+    parser.add_argument('--GPR_interval', type = int, default=10, 
+                        help='interval of sampling and training of GP, namely, Delta t')
     parser.add_argument('--group_size',type = int, default = 11, 
-                        help = 'length of history round to sample for GP, equal to M Delta t + 1 in paper')
+                        help='length of history round to sample for GP, equal to M Delta t + 1 in paper')
     parser.add_argument('--GPR_gamma',type = float,default = 0.8,
-                        help = 'gamma for training GP')
+                        help='gamma for training GP')
     parser.add_argument('--GPR_Epoch',type=int,default=100,
-                        help = 'number of optimization iterations of GP')
+                        help='number of optimization iterations of GP')
+    parser.add_argument('--fedcor_beta', type=float, default=0.95,
+                        help='beta for FedCor')
 
     # gradient based approach
     parser.add_argument('--similarity_measure', type=str, default='distance')
