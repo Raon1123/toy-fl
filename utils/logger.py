@@ -21,7 +21,10 @@ def print_experiment(args):
     print("num_clients: ", args.num_clients)
 
     print("label_distribution: ", args.label_distribution)
-    print("label_dirichlet: ", args.label_dirichlet)
+    if args.label_distribution == 'Dirichlet':
+        print("label_dirichlet: ", args.label_dirichlet)
+    elif args.label_distribution == 'shard':
+        print("shard_per_client: ", args.shard_per_client)
 
     print("models: ", args.model)
     print("num_rounds: ", args.num_rounds)
@@ -40,6 +43,8 @@ def exp_str(args):
     join_list.append(args.label_distribution)
     if args.label_distribution == 'Dirichlet':
         join_list.append(str(args.label_dirichlet))
+    elif args.label_distribution == 'shard':
+        join_list.append(str(args.shard_per_client))
 
     if args.postfix != '':
         join_list.append(args.postfix)

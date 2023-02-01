@@ -64,10 +64,12 @@ def argparser():
     parser.add_argument('--batch_size', type=int, default=32)
     
     parser.add_argument('--label_distribution', type=str, default='uniform',
-        choices=['Dirichlet', 'random', 'uniform'],
+        choices=['Dirichlet', 'random', 'uniform', 'shard'],
         help='distribution of labels in client')
     parser.add_argument('--label_dirichlet', type=float, default=0.2,
         help='divide method')
+    parser.add_argument('--shard_per_client', type=int, default=1,
+        help='shard_per_client')
 
     # active client selection settings
     parser.add_argument('-C', '--active_selection', type=int, default=5)

@@ -81,6 +81,7 @@ def acs_powd(args, size_array, prev_losses):
 
     # select highest loss clients
     selected_clients = sorted_d_loss[:args.active_selection]
+    selected_clients = select_d_client[selected_clients]
 
     return selected_clients
 
