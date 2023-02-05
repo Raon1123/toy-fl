@@ -6,8 +6,8 @@ outs/
 
 nohup.out
 test.py
+plot.ipynb
 
-*.sh
 *.out
 *.lprof
 *.tar

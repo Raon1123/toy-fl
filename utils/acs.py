@@ -1,12 +1,23 @@
+import copy
+import math
+
 import numpy as np
-
 import torch
-from utils.toolkit import get_pairdistance
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, Subset
 
-def acs_random(args):
-    selected_clients = np.random.choice(args.num_clients, 
-        args.active_selection, 
-        replace=False)
+import utils.toolkit as tk
+import models.gp as gp
+
+def acs_random(num_clients, selection, pmf=None):
+    if pmf is None:
+        pmf = np.ones(num_clients) / num_clients
+
+    selected_clients = np.random.choice(num_clients, 
+        selection, 
+        replace=False, 
+        p=pmf)
 
     return selected_clients
 
@@ -15,12 +26,12 @@ def acs_badge(args, prev_params):
     params = torch.stack(prev_params)
     pdist_mat = torch.full((args.active_selection, args.num_clients), torch.inf)
     selected_clients = []
-
+ 
     # using k-means++
     seed_client = np.random.choice(args.num_clients, 
         1, replace=False).item()
     selected_clients.append(seed_client)
-    pdist_mat[0:,] = get_pairdistance(params[seed_client,:], params)
+    pdist_mat[0:,] = tk.get_pairdistance(params[seed_client,:], params)
 
     for t in range(1, args.active_selection):
         pmf, _ = pdist_mat.min(dim=0)
@@ -29,7 +40,7 @@ def acs_badge(args, prev_params):
         select = pmf.multinomial(num_samples=1, replacement=False).item()
         selected_clients.append(select)
 
-        pdist_mat[t,:] = get_pairdistance(params[select,:], params)
+        pdist_mat[t,:] = tk.get_pairdistance(params[select,:], params)
     
     return selected_clients
 
@@ -40,7 +51,9 @@ def acs_loss(args, prev_losses):
     loss_list = loss_array.tolist()  
 
     pmf = list(map(lambda item: item/total_loss, loss_list))
-    print("pmf:", pmf)
+    
+    if args.verbose:
+        print("pmf:", pmf)
 
     selected_clients = np.random.choice(args.num_clients, 
         args.active_selection, 
@@ -57,7 +70,9 @@ def acs_powd(args, size_array, prev_losses):
     total_size = np.sum(size_array)
     norm = lambda x: x / total_size
     pmf = norm(size_array)
-    print("pmf:", pmf)
+    
+    if args.verbose:
+        print("pmf:", pmf)
 
     select_d_client = np.random.choice(args.num_clients,
         args.powd,
@@ -70,5 +85,144 @@ def acs_powd(args, size_array, prev_losses):
 
     # select highest loss clients
     selected_clients = sorted_d_loss[:args.active_selection]
+    selected_clients = select_d_client[selected_clients]
 
     return selected_clients
+
+
+def acs_topk(args, prev_losses):
+    """
+    """
+    sorted_loss = np.argsort(-prev_losses)
+    selected_clients = sorted_loss[:args.active_selection]
+
+    return selected_clients
+
+
+def acs_fedcor(args, mu, sigma, alpha):
+    """
+    Active client selection algorithm for FedCor
+    - mu (matrix): 0-vector
+    - sigma (matrix): X.T X
+    - alpha (float): scale factor
+    """
+    # In FedCor paper implementation, they always use with "gpr_selection = True" option
+
+    selected_clients = []
+    candidate_clients = list(range(args.num_clients))
+
+
+    for _ in range(args.active_selection):
+        # compute the score for each candidate client
+        score = np.zeros(args.num_clients)
+        for i in candidate_clients:
+            score[i] = np.dot(mu[i], np.dot(sigma[i], mu[i]))
+
+        # select the client with the highest score
+        selected = np.argmax(score)
+        selected_clients.append(selected)
+
+        # remove the selected client from the candidate list
+        candidate_clients.remove(selected)
+
+        # update mu and sigma
+        mu = mu - alpha * np.dot(sigma[selected], mu)
+        sigma = sigma - alpha * np.dot(sigma[selected], sigma)
+
+    return selected_clients
+
+
+def gpr_warmup(args, 
+    epoch, 
+    gpr,
+    prev_losses,
+    current_loss, 
+    gpr_data):
+
+    gpr.update_loss(np.arange(args.num_clients), current_loss)
+    epoch_gpr_data = np.concatenate([np.expand_dims(list(range(args.num_clients)),1),
+                                    np.expand_dims(current_loss-prev_losses,1),
+                                    np.ones([args.num_clients,1])],1)
+    gpr_data.append(epoch_gpr_data)
+    print("Training GPR")
+    gp.TrainGPR(gpr,
+            gpr_data[max([(epoch-args.gpr_begin-args.group_size+1),0]):epoch-args.gpr_begin+1],
+            matrix_lr=1e-2,
+            sigma_lr=0.0,
+            gamma=args.GPR_gamma,
+            max_epoches=args.GPR_Epoch+50,
+            verbose=args.verbose)
+
+
+def gpr_optimal(args, 
+    gpr, 
+    active_selection, 
+    model, 
+    datasets, 
+    partitions,
+    current_loss, 
+    gpr_data,
+    device='cpu'):
+
+    gpr.update_loss(np.arange(args.num_clients), current_loss)
+    gpr.reset_discount()
+    #print("Training with Random Selection For GPR Training:")
+    
+    # select users for update
+    loss_list = []
+    selected_clients = np.random.choice(range(args.num_clients), active_selection, replace=False)
+    
+    for client_idx in selected_clients:
+        client_dataloader = tk.get_local_dataloader(args, client_idx, partitions, datasets)
+
+        copy_model = copy.deepcopy(model)
+        copy_model.to(device)
+        optimizer = optim.SGD(copy_model.parameters(), lr=args.lr, momentum=args.momentum)
+
+        lossf = nn.CrossEntropyLoss()
+        for _ in range(args.local_epoch):
+            for imgs, labels in client_dataloader:
+                imgs, labels = imgs.to(device), labels.to(device) 
+
+                optimizer.zero_grad()
+                outputs = model(imgs)
+                loss = lossf(outputs, labels)
+
+                loss.backward()
+                optimizer.step()
+
+    model.eval()
+    for client_idx in range(args.num_clients):
+        correct = 0
+        running_loss = 0.0
+        lossf = nn.CrossEntropyLoss()
+        client_dataloader = tk.get_local_dataloader(args, client_idx, partitions, datasets)
+
+        with torch.no_grad():
+            for imgs, labels in client_dataloader:
+                imgs, labels = imgs.to(device), labels.to(device) 
+
+                outputs = model(imgs)
+                loss = lossf(outputs, labels)
+                _, pred = torch.max(outputs.data, 1)
+                correct += (pred == labels).sum().item()
+
+                running_loss += loss.detach().cpu().item() * labels.size(0)
+        loss_list.append(running_loss/len(partitions[client_idx]))
+
+    epoch_gpr_data = np.concatenate([np.expand_dims(list(range(args.num_clients)),1),
+                                    np.expand_dims(np.array(loss_list)-current_loss,1),
+                                    np.ones([args.num_clients,1])],1)
+    gpr_data.append(epoch_gpr_data)
+    print("Training GPR")
+    gp.TrainGPR(gpr,
+            gpr_data[-math.ceil(args.group_size/args.GPR_interval):],
+            matrix_lr=1e-2,
+            sigma_lr=0.0,
+            gamma=args.GPR_gamma**args.GPR_interval,
+            max_epoches=args.GPR_Epoch,
+            verbose=args.verbose)
+
+
+def acs_fedcor_warmup():
+    pass

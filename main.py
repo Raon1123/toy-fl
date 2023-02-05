@@ -9,37 +9,36 @@ from torch.utils.data import DataLoader
 
 from tqdm import tqdm
 
-from torch.utils.tensorboard import SummaryWriter
-
+import models.gp as gp
 from models.modelutil import get_model
 from utils.parser import argparser, get_device
-from utils.epochs import test_epoch, train_epoch, run_round
-from utils.logger import log_bin, save_model, save_loss
-from utils.logger import exp_str, write_timestamp
+from utils.epochs import test_epoch, run_round
+import utils.logger as logger
 from utils.datasets import get_dataset
 from utils.toolkit import set_seed
 
 
 def main(args, writer, seed):
     device = get_device(args)
-    experiment = exp_str(args, seed)
-
-    print("=" * 20)
-    print("Experiment: ", experiment)
-    print("=" * 20)
+    
+    logger.print_experiment(args)
+    save_DIR, loss_DIR = logger.get_save_dir(args, seed)
     
     num_clients = args.num_clients
     num_rounds = args.num_rounds
-
-    os.makedirs(args.save_path, exist_ok=True)
-    save_DIR = os.path.join(args.save_path, experiment)
-    os.makedirs(save_DIR, exist_ok=True)
+    acc_list = []
 
     # datasets
-    train_dataset, test_dataset, partition, num_classes, in_channel = get_dataset(args) 
+    train_dataset, test_dataset, partition, num_classes, in_channel = get_dataset(args, seed) 
+
+    partition_weight = np.array([len(l) for l in partition]) 
+    partition_weight = partition_weight / np.sum(partition_weight) # normalzie
 
     test_loader = DataLoader(test_dataset, 
-        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+        batch_size=args.batch_size, 
+        shuffle=False, 
+        num_workers=args.num_workers)
+
     active_client_bin = [0] * num_clients
 
     model = get_model(args, num_classes, in_channel)
@@ -48,21 +47,38 @@ def main(args, writer, seed):
 
     loss_array = None
     client_params = None
+    gpr = None
+    gpr_data = []
+
+    if args.active_algorithm == 'FedCor':
+        gpr = gp.Kernel_GPR(args.num_clients,
+                 dimension=15,
+                 init_noise=0.01,
+                 order=1, 
+                 kernel=gp.PolyKernel,
+                 loss_type='MML')
 
     # train phase
     pbar = tqdm(range(num_rounds), desc='FL round')
-    for round in pbar:
-        ret = run_round(model, 
+    for communication_round in pbar:
+        ret = run_round(
+            communication_round,
+            model, 
             train_dataset, 
             partition, 
             args, 
             prev_losses=loss_array, 
-            prev_params=client_params)
+            prev_params=client_params,
+            gpr=gpr,
+            gpr_data=gpr_data)
         active_idx, loss_array, client_params = ret
 
-        train_loss = np.average(loss_array)
-
-        print(active_idx)
+        if args.verbose:
+            print("Round ", communication_round)
+            print("Selected client", active_idx)
+            print("Loss array", loss_array)
+        train_loss = np.sum(loss_array * partition_weight)
+            
         # bin count
         for idx in active_idx:
             active_client_bin[idx] = active_client_bin[idx] + 1
@@ -76,65 +92,26 @@ def main(args, writer, seed):
             'Train Loss': train_loss
         }
         pbar.set_postfix(desc)
+        acc_list.append(acc)
 
         # logging
-        if (writer is not None) and ((round + 1) % args.log_freq == 0):
+        if (writer is not None) and ((communication_round + 1) % args.log_freq == 0):
             prefix = 'FL'
-            writer.add_scalar(prefix+'/Test Acc', acc, round)
-            writer.add_scalar(prefix+'/Test Loss', test_loss, round)
-            writer.add_scalar(prefix+'/Train Loss', train_loss, round)
-            save_loss(loss_array, round, save_DIR)
+            writer.add_scalar(prefix+'/Test Acc', acc, communication_round)
+            writer.add_scalar(prefix+'/Test Loss', test_loss, communication_round)
+            writer.add_scalar(prefix+'/Train Loss', train_loss, communication_round)
+            logger.save_loss(loss_array, communication_round, loss_DIR)
 
     writer.flush()
 
-    log_bin(active_client_bin, partition, save_DIR)
+    logger.save_bin(active_client_bin, partition, save_DIR, seed)
+    logger.save_acc(acc_list, save_DIR, seed)
     if args.model_save:
-        save_model(model, save_DIR) 
-    
-
-def central_main(args, writer):
-    device = get_device(args)
-    experiment = exp_str(args)
-
-    os.makedirs(args.save_path, exist_ok=True)
-    save_DIR = os.path.join(args.save_path, experiment)
-    os.makedirs(save_DIR, exist_ok=True)
-
-    train_dataset, test_dataset, _, num_classes, in_channel = get_dataset(args)
-
-    train_loader = DataLoader(train_dataset, 
-        batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-    test_loader = DataLoader(test_dataset, 
-        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
-
-    print("=== Centralized Setting ===")
-    
-    center_model = get_model(args, num_classes, in_channel)
-    center_model = center_model.to(device)
-    optimizer = optim.SGD(center_model.parameters(), lr=args.lr, momentum=args.momentum)
-    lossf = nn.CrossEntropyLoss()
-
-    acc = 0
-    test_loss = 0.0
-
-    pbar = tqdm(range(args.central_epoch))
-
-    for epoch in pbar:
-        train_loss, test_loss = 0.0, 0.0
-        train_loss = train_epoch(center_model, optimizer, lossf, train_loader, args, device)
-        
-        if (writer is not None) and ((epoch + 1) % args.log_freq == 0):
-            acc, test_loss = test_epoch(center_model, test_loader, device)
-            prefix = 'Centralized'
-            writer.add_scalar(prefix+'/Test Acc', acc, epoch)
-            writer.add_scalar(prefix+'/Test Loss', test_loss, epoch)
-            writer.add_scalar(prefix+'/Train Loss', train_loss, epoch)
-            pbar.set_postfix({'Acc': acc, 'Test loss': test_loss, 'Train loss': train_loss})
-    writer.flush()
+        logger.save_model(model, save_DIR, seed) 
 
 
 if __name__=='__main__':
-    write_timestamp("Start")
+    logger.write_timestamp("Start")
     args = argparser()
 
     seed_list = args.seeds
@@ -143,13 +120,9 @@ if __name__=='__main__':
         print("seed", seed)
         set_seed(seed)
 
-        experiment = exp_str(args, seed)
-        log_PATH = os.path.join(args.logdir, experiment)
-        writer = SummaryWriter(log_dir=log_PATH)
+        writer = logger.get_writer(args, seed)
 
         if not args.centralized:
             main(args, writer, seed)
-        write_timestamp("End FL")
+        logger.write_timestamp("End FL")
     
-    #central_main(args, writer)
-    #write_timestamp("End CL")

@@ -5,6 +5,7 @@ import numpy as np
 
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader, Subset
 
 def set_seed(seed):
     torch.manual_seed(seed)
@@ -38,6 +39,15 @@ def get_last_param(model):
     return last_param
 
 
+def get_local_dataloader(args, client_idx, partitions, datasets):
+    train_partition = partitions[client_idx]
+    datasubset = Subset(datasets, train_partition)
+    client_dataloader = DataLoader(datasubset, batch_size=args.batch_size, 
+        shuffle=True, num_workers=args.num_workers, pin_memory=args.pin_memory)
+
+    return client_dataloader
+
+
 def get_pairdistance(vec1, vec2):
     """
     """
@@ -45,6 +55,17 @@ def get_pairdistance(vec1, vec2):
     ret = pdist(vec1, vec2)
 
     return ret
+
+
+def get_partition_weight(partitions):
+    """
+    get ratio of each partition
+    """
+    partition_weight = [len(partitions[i]) for i in range(len(partitions))]
+    partition_weight = np.array(partition_weight)
+    partition_weight = partition_weight / np.sum(partition_weight)
+
+    return partition_weight
 
 
 def get_dataset_labels(dataset):

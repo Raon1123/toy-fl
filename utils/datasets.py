@@ -41,10 +41,30 @@ def get_partition(args, label_idx, num_classes, data_size):
         label_dist = label_dist.T # (num_clients, num_classes)
     elif args.label_distribution == 'uniform':
         label_dist = np.full((num_clients, num_classes), 1.0 / num_clients)
-    elif args.label_distribution == 'random':
-        candidate_data_index = []
-        for labels in label_idx:
-            candidate_data_index = candidate_data_index + labels  
+    elif args.label_distribution == 'shard':
+        num_shard = num_clients * args.shard_per_client
+        shard_list = np.arange(num_shard, dtype=int)
+        shard_size = data_size // num_shard
+
+        idxs = []
+        for l in label_idx:
+            idxs += l.tolist()
+
+        for client_idx in range(num_clients):
+            rand_set = np.random.choice(shard_list, args.shard_per_client, replace=False)
+            shard_list = list(set(shard_list) - set(rand_set))
+            client_idx_list = []
+            for shard in rand_set:
+                start = shard * shard_size
+                end = start + shard_size
+                client_idx_list.append(idxs[start:end])
+
+            client_idx_arr = np.array(client_idx_list).flatten()
+            np.random.shuffle(client_idx_arr)
+            print(client_idx_arr.shape)
+            partition.append(client_idx_arr.tolist())
+            
+        return partition
     else:
         raise Exception('Wrong divide method') 
 
@@ -55,28 +75,34 @@ def get_partition(args, label_idx, num_classes, data_size):
         sample_idx = []
         distribution = client_dist[client_id,:] # (num_classes,)
 
-        if args.label_distribution == 'random':
-            sample_idx = np.random.choice(candidate_data_index, np.sum(distribution))
-            for idx in sample_idx:
-                candidate_data_index.remove(idx)
-        else:
-            for label in range(num_classes):
-                sample_size = min(distribution[label], len(label_idx[label]))
-                if len(label_idx[label]) == 0:
-                    continue
-                sample = np.random.choice(label_idx[label], sample_size, replace=False)
-                label_idx[label] = np.setdiff1d(label_idx[label], sample)
-                sample_idx += sample.tolist()
+        for label in range(num_classes):
+            sample_size = min(distribution[label], len(label_idx[label]))
+            if len(label_idx[label]) == 0:
+                continue
+            sample = np.random.choice(label_idx[label], sample_size, replace=False)
+            label_idx[label] = np.setdiff1d(label_idx[label], sample)
+            sample_idx += sample.tolist()
 
+        if len(sample_idx) == 0:
+            continue
         partition.append(sample_idx)
 
     # for remain part
     # randomly add
-    for label in range(num_classes):
-        remain = label_idx[label]
-        for idx in remain:
-            client_idx = np.random.choice(num_clients, 1).item()
-            partition[client_idx].append(idx)
+    if len(partition) == num_clients:
+        for label in range(num_classes):
+            remain = label_idx[label]
+            for idx in remain:
+                client_idx = np.random.choice(num_clients, 1).item()
+                partition[client_idx].append(idx)
+    else:
+        extra_partition = [[] for _ in range(num_clients-len(partition))]
+        for label in range(num_classes):
+            remain = label_idx[label]
+            for idx in remain:
+                client_idx = np.random.choice(num_clients-len(partition), 1).item()
+                extra_partition[client_idx].append(idx)
+        partition += extra_partition
 
     partition = [np.array(l) for l in partition]
 
@@ -85,7 +111,7 @@ def get_partition(args, label_idx, num_classes, data_size):
     return partition
 
 
-def get_dataset(args):
+def get_dataset(args, seed):
     """
     Output
     - train_dataset: (train_data, train_labels)
@@ -134,11 +160,17 @@ def get_dataset(args):
         idx = np.where(np.array(train_labels) == label)[0]
         label_idx.append(idx)
 
-    join_list = [args.dataset, args.label_distribution, str(args.num_clients), "partiton.pickle"]
+    dist_str = args.label_distribution
+    if dist_str == 'Dirichlet':
+        dist_str = dist_str + str(args.label_dirichlet)
+    elif dist_str == 'shard':
+        dist_str = dist_str + str(args.shard_per_client)
+
+    join_list = [args.dataset, dist_str, str(args.num_clients), str(seed), "partiton.pickle"]
     partition_file = '_'.join(join_list)
     partition_PATH = os.path.join(args.logdir, partition_file)
     if os.path.exists(partition_PATH):
-        print("Load partition")
+        print("Load partition ", partition_PATH)
         with open(partition_PATH, "rb") as fr:
             partition = pickle.load(fr)
     else:
@@ -173,30 +205,30 @@ def get_cifar10feature(args):
     return train_dataset, test_dataset
 
 
-if __name__ == "__main__":
+def dataset_test():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--data_dir', type=str, default='../data',
+    parser.add_argument('--data_dir', type=str, default='/home/ayp/datasets',
         help='root directory of data')
-    parser.add_argument('--logdir', type=str, default='../logdir')
+    parser.add_argument('--logdir', type=str, default='./logdir')
     parser.add_argument('--dataset', type=str, default='cifar10',
         choices=DATASET,
         help='experiment dataset')
 
     parser.add_argument('-C', '--num_clients', type=int, default=100)
-    parser.add_argument('--client_distribution', type=str, default='uniform',
-        choices=['Dirichlet', 'IID'],
-        help='distribution of number of clients')
-    parser.add_argument('--client_dirichlet', type=float, default=10)
 
-    parser.add_argument('--label_distribution', type=str, default='Dirichlet',
-        choices=['Dirichlet', 'random', 'uniform'],
+    parser.add_argument('--label_distribution', type=str, default='shard',
+        choices=['Dirichlet', 'random', 'uniform', 'shard'],
         help='distribution of labels in client')
     parser.add_argument('--label_dirichlet', type=float, default=0.2,
         help='divide method')
+    parser.add_argument('--shard_per_client', type=int, default=1,
+        help='shard_per_client')
+
+    parser.add_argument('--seed', type=int, default=0)
 
     args = parser.parse_args()
-    _, _, partition, _, _ = get_dataset(args)
+    _, _, partition, _, _ = get_dataset(args, args.seed)
     print("Partition Generation Done")
     summation = 0
     for part in partition:

@@ -31,6 +31,8 @@ def get_optimizer(model, args):
 
     if args.optimizer == 'SGD':
         optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+    else:
+        raise NotImplementedError
 
     assert optimizer is not None
     return optimizer
@@ -62,10 +64,12 @@ def argparser():
     parser.add_argument('--batch_size', type=int, default=32)
     
     parser.add_argument('--label_distribution', type=str, default='uniform',
-        choices=['Dirichlet', 'random', 'uniform'],
+        choices=['Dirichlet', 'random', 'uniform', 'shard'],
         help='distribution of labels in client')
     parser.add_argument('--label_dirichlet', type=float, default=0.2,
         help='divide method')
+    parser.add_argument('--shard_per_client', type=int, default=1,
+        help='shard_per_client')
 
     # active client selection settings
     parser.add_argument('-C', '--active_selection', type=int, default=5)
@@ -76,6 +80,22 @@ def argparser():
     # pow-d
     parser.add_argument('--powd', type=int, default=10,
         help='d value of power-of-d method')
+
+    # FedCor
+    parser.add_argument('--warmup',type = int, default=15,
+                        help = 'length of warm up phase for GP')
+    parser.add_argument('--gpr_begin', type = int,default=10,
+                        help='the round begin to sample and train GP')
+    parser.add_argument('--GPR_interval', type = int, default=10, 
+                        help='interval of sampling and training of GP, namely, Delta t')
+    parser.add_argument('--group_size',type = int, default = 11, 
+                        help='length of history round to sample for GP, equal to M Delta t + 1 in paper')
+    parser.add_argument('--GPR_gamma',type = float,default = 0.8,
+                        help='gamma for training GP')
+    parser.add_argument('--GPR_Epoch',type=int,default=100,
+                        help='number of optimization iterations of GP')
+    parser.add_argument('--fedcor_beta', type=float, default=0.95,
+                        help='beta for FedCor')
 
     # gradient based approach
     parser.add_argument('--similarity_measure', type=str, default='distance')
@@ -105,7 +125,7 @@ def argparser():
                         help="number of filters in each convolutional layer.")
     parser.add_argument('--padding', action='store_true', 
                         help='use padding in each convolutional layer')
-    parser.add_argument('--mlp_layers',type= int,default=[64,],nargs="*",
+    parser.add_argument('--mlp_layers',type= int,default=[64,],nargs="+",
                         help="numbers of dimensions of each hidden layer in MLP, or fc layers in CNN")
     parser.add_argument('--depth',type = int,default = 20, 
                         help = "The depth of ResNet. Only valid when model is resnet")
