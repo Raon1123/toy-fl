@@ -118,16 +118,29 @@ def run_round(
         size_arr[client_idx] = client_size
 
     if args.active_algorithm == 'LossSampling' and prev_losses is not None:
-        selected_clients = acs_loss(args, prev_losses)
+        sample_losses = prev_losses
+        if args.active_algorithm[-4:] == 'cum':
+            sample_losses = prev_losses * size_arr
+        selected_clients = acs_loss(args, sample_losses)
     elif args.active_algorithm == 'GradientBADGE' and prev_params is not None:
         selected_clients = acs_badge(args, prev_params)
     elif args.active_algorithm == 'powd' and prev_losses is not None:
         selected_clients = acs_powd(args, size_arr, prev_losses)
-    #elif args.active_algorithm == 'FedCor':
-        #assert NotImplementedError
-        # selected_clients = acs_fedcor(args, size_arr, prev_losses)
+    elif args.active_algorithm == 'FedCor':
+        if communication_round>=args.warmup:
+            selected_clients = gpr.select_clients(
+                number=args.active_selection, 
+                loss_power=0.3,
+                discount_method='time',
+                weights=weights 
+                )
+        else:
+            selected_clients = acs_random(args.num_clients, args.active_selection)  
     else:
-        selected_clients = acs_random(args)  
+        pmf = None
+        if args.active_algorithm[-4:] == 'size':
+            pmf = size_arr / np.sum(size_arr)
+        selected_clients = acs_random(args.num_clients, args.active_selection, pmf)  
 
     train_size = np.sum(size_arr[np.array(selected_clients)])
 
@@ -209,7 +222,6 @@ def run_round(
                 prev_losses,
                 loss_array,
                 gpr_data)
-
         elif communication_round>args.warmup and communication_round%args.GPR_interval==0:# normal and optimization round
             gpr_optimal(args, 
                 gpr, 
@@ -220,21 +232,8 @@ def run_round(
                 loss_array, 
                 gpr_data,
                 device) 
-
         else:# normal and not optimization round
             gpr.update_loss(selected_clients, loss_array[selected_clients])
             gpr.update_discount(selected_clients, args.fedcor_beta)
             
-        if communication_round>=args.warmup:
-            gpr_idxs_users = gpr.select_clients(
-                args.active_selection, 
-                0.3,
-                0.0,
-                'time',
-                weights # partition size
-                )
-                
-            print("GPR Chosen Clients:",gpr_idxs_users)
-    
-
     return selected_clients, loss_array, param_list
