@@ -10,10 +10,14 @@ from torch.utils.data import DataLoader, Subset
 import utils.toolkit as tk
 import models.gp as gp
 
-def acs_random(args):
-    selected_clients = np.random.choice(args.num_clients, 
-        args.active_selection, 
-        replace=False)
+def acs_random(num_clients, selection, pmf=None):
+    if pmf is None:
+        pmf = np.ones(num_clients) / num_clients
+
+    selected_clients = np.random.choice(num_clients, 
+        selection, 
+        replace=False, 
+        p=pmf)
 
     return selected_clients
 

@@ -10,13 +10,6 @@ from torch.distributions.normal import Normal
 Origin sourse of GP code is FedCor paper.
 """
 
-"""
-np.concatenate([np.expand_dims(list(range(args.num_users)),1),
-                                    np.expand_dims(np.array(gt_global_losses[-1])-np.array(gt_global_losses[-2]),1),
-                                    np.ones([args.num_users,1])],1)
-"""
-
-
 class GPR(nn.Module):
     def __init__(self,
         num_users,
