@@ -5,7 +5,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Subset
 
 import utils.toolkit as tk
 import models.gp as gp
@@ -95,39 +94,6 @@ def acs_topk(args, prev_losses):
     """
     sorted_loss = np.argsort(-prev_losses)
     selected_clients = sorted_loss[:args.active_selection]
-
-    return selected_clients
-
-
-def acs_fedcor(args, mu, sigma, alpha):
-    """
-    Active client selection algorithm for FedCor
-    - mu (matrix): 0-vector
-    - sigma (matrix): X.T X
-    - alpha (float): scale factor
-    """
-    # In FedCor paper implementation, they always use with "gpr_selection = True" option
-
-    selected_clients = []
-    candidate_clients = list(range(args.num_clients))
-
-
-    for _ in range(args.active_selection):
-        # compute the score for each candidate client
-        score = np.zeros(args.num_clients)
-        for i in candidate_clients:
-            score[i] = np.dot(mu[i], np.dot(sigma[i], mu[i]))
-
-        # select the client with the highest score
-        selected = np.argmax(score)
-        selected_clients.append(selected)
-
-        # remove the selected client from the candidate list
-        candidate_clients.remove(selected)
-
-        # update mu and sigma
-        mu = mu - alpha * np.dot(sigma[selected], mu)
-        sigma = sigma - alpha * np.dot(sigma[selected], sigma)
 
     return selected_clients
 
@@ -223,6 +189,3 @@ def gpr_optimal(args,
             max_epoches=args.GPR_Epoch,
             verbose=args.verbose)
 
-
-def acs_fedcor_warmup():
-    pass

@@ -119,8 +119,11 @@ def run_round(
 
     if args.active_algorithm == 'LossSampling' and prev_losses is not None:
         sample_losses = prev_losses
+
+        # cumulate loss sampling
         if args.active_algorithm[-4:] == 'cum':
             sample_losses = prev_losses * size_arr
+
         selected_clients = acs_loss(args, sample_losses)
     elif args.active_algorithm == 'GradientBADGE' and prev_params is not None:
         selected_clients = acs_badge(args, prev_params)
@@ -138,8 +141,10 @@ def run_round(
             selected_clients = acs_random(args.num_clients, args.active_selection)  
     else:
         pmf = None
+        # size sampling
         if args.active_algorithm[-4:] == 'size':
             pmf = size_arr / np.sum(size_arr)
+            
         selected_clients = acs_random(args.num_clients, args.active_selection, pmf)  
 
     train_size = np.sum(size_arr[np.array(selected_clients)])
