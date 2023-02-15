@@ -45,11 +45,27 @@ def acs_badge(args, prev_params):
 
 
 def acs_loss(args, prev_losses):
-    loss_array = np.exp(prev_losses)
+    loss_array = np.array(prev_losses)
     total_loss = np.sum(loss_array)
-    loss_list = loss_array.tolist()  
+    pmf = loss_array / total_loss
+    
+    if args.verbose:
+        print("pmf:", pmf)
 
-    pmf = list(map(lambda item: item/total_loss, loss_list))
+    selected_clients = np.random.choice(args.num_clients, 
+        args.active_selection, 
+        replace=False, 
+        p=pmf)
+
+    return selected_clients
+
+
+def acs_afl(args, prev_losses):
+    loss_array = np.array(prev_losses)
+    loss_array = loss_array - np.max(loss_array)
+    loss_array = np.exp(loss_array)
+    total_loss = np.sum(loss_array)
+    pmf = loss_array / total_loss
     
     if args.verbose:
         print("pmf:", pmf)

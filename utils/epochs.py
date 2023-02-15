@@ -9,9 +9,7 @@ from torch.utils.data import DataLoader, Subset
 
 from utils.parser import get_device
 from utils.toolkit import get_last_param, get_local_dataloader, get_partition_weight
-from utils.acs import (
-    acs_random, acs_loss, acs_badge, acs_powd, 
-    gpr_warmup, gpr_optimal)
+import utils.acs as acs 
 from utils.federated import fedavg
 
 
@@ -97,6 +95,7 @@ def run_round(
     - train_loss: total training loss
     """
     SEARCH_EVERY_METHOD = ['GradientBADGE']
+    LOSS_BASED_METHOD = ['LossSampling', 'LossSamplingcum', 'AFL', 'powd']
 
     device = get_device(args)
 
@@ -117,18 +116,20 @@ def run_round(
         client_size = len(partitions[client_idx])
         size_arr[client_idx] = client_size
 
-    if args.active_algorithm == 'LossSampling' and prev_losses is not None:
+    if args.active_algorithm in LOSS_BASED_METHOD and prev_losses is not None:
         sample_losses = prev_losses
-
         # cumulate loss sampling
-        if args.active_algorithm[-4:] == 'cum':
+        if args.active_algorithm == 'LossSampling':
+            selected_clients = acs.acs_loss(args, sample_losses)
+        elif args.active_algorithm == 'LossSamplingcum':
             sample_losses = prev_losses * size_arr
-
-        selected_clients = acs_loss(args, sample_losses)
+            selected_clients = acs.acs_loss(args, sample_losses)
+        elif args.active_algorithm == 'AFL':
+            selected_clients = acs.acs_afl(args, sample_losses)
+        elif args.active_algorithm == 'powd':
+            selected_clients = acs.acs_powd(args, size_arr, prev_losses)
     elif args.active_algorithm == 'GradientBADGE' and prev_params is not None:
-        selected_clients = acs_badge(args, prev_params)
-    elif args.active_algorithm == 'powd' and prev_losses is not None:
-        selected_clients = acs_powd(args, size_arr, prev_losses)
+        selected_clients = acs.acs_badge(args, prev_params)        
     elif args.active_algorithm == 'FedCor':
         if communication_round>=args.warmup:
             selected_clients = gpr.select_clients(
@@ -138,14 +139,14 @@ def run_round(
                 weights=weights 
                 )
         else:
-            selected_clients = acs_random(args.num_clients, args.active_selection)  
+            selected_clients = acs.acs_random(args.num_clients, args.active_selection)  
     else:
         pmf = None
         # size sampling
         if args.active_algorithm[-4:] == 'size':
             pmf = size_arr / np.sum(size_arr)
             
-        selected_clients = acs_random(args.num_clients, args.active_selection, pmf)  
+        selected_clients = acs.acs_random(args.num_clients, args.active_selection, pmf)  
 
     train_size = np.sum(size_arr[np.array(selected_clients)])
 
@@ -220,7 +221,7 @@ def run_round(
     # train and exploit GPR
     if args.active_algorithm == 'FedCor':
         if communication_round<=args.warmup and communication_round>=args.gpr_begin:# warm-up
-            gpr_warmup(
+            acs.gpr_warmup(
                 args, 
                 communication_round, 
                 gpr, 
@@ -228,7 +229,7 @@ def run_round(
                 loss_array,
                 gpr_data)
         elif communication_round>args.warmup and communication_round%args.GPR_interval==0:# normal and optimization round
-            gpr_optimal(args, 
+            acs.gpr_optimal(args, 
                 gpr, 
                 args.active_selection, 
                 model, 
